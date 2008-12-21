@@ -1721,7 +1721,11 @@ class Query(object):
         if where or params:
             self.where.add(ExtraWhere(where, params), AND)
         if tables:
-            self.extra_tables += tuple(tables)
+            # allow tables to be dictionaries mapping names to subselects
+            if hasattr(tables, 'items'):
+                self.extra_tables += tuple(tables.items())
+            else:
+                self.extra_tables += tuple(tables)
         if order_by:
             self.extra_order_by = order_by
 
