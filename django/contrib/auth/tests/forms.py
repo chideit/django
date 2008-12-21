@@ -308,6 +308,7 @@ class UserChangeFormTest(TestCase):
 class PasswordResetFormTest(TestCase):
 
     fixtures = ['authtestdata.json']
+    urls = 'django.contrib.auth.urls'
 
     def create_dummy_user(self):
         """creates a user and returns a tuple
@@ -344,7 +345,7 @@ class PasswordResetFormTest(TestCase):
     def test_custom_email_subject(self):
         template_path = os.path.join(os.path.dirname(upath(__file__)), 'templates')
         with self.settings(TEMPLATE_DIRS=(template_path,)):
-            data = {'email': 'testclient@example.com'}
+            data = {'email': 'testclient1@example.com'}
             form = PasswordResetForm(data)
             self.assertTrue(form.is_valid())
             # Since we're not providing a request object, we must provide a
