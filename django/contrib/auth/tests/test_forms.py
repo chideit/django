@@ -336,6 +336,7 @@ class UserChangeFormTest(TestCase):
 class PasswordResetFormTest(TestCase):
 
     fixtures = ['authtestdata.json']
+    urls = 'django.contrib.auth.urls'
 
     def create_dummy_user(self):
         """
@@ -372,7 +373,7 @@ class PasswordResetFormTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
 
     def test_custom_email_subject(self):
-        data = {'email': 'testclient@example.com'}
+        data = {'email': 'testclient1@example.com'}
         form = PasswordResetForm(data)
         self.assertTrue(form.is_valid())
         # Since we're not providing a request object, we must provide a
