@@ -60,8 +60,8 @@ class RemoteUserTest(TestCase):
         """
         Tests the case where the username passed in the header is a valid User.
         """
-        User.objects.create(username='knownuser')
-        User.objects.create(username='knownuser2')
+        User.objects.create(username='knownuser', email='knownuser@example.com')
+        User.objects.create(username='knownuser2', email='knownuser2@example.com')
         num_users = User.objects.count()
         response = self.client.get('/remote_user/', REMOTE_USER=self.known_user)
         self.assertEqual(response.context['user'].username, 'knownuser')
@@ -77,7 +77,7 @@ class RemoteUserTest(TestCase):
         Tests that a user's last_login is set the first time they make a
         request but not updated in subsequent requests with the same session.
         """
-        user = User.objects.create(username='knownuser')
+        user = User.objects.create(username='knownuser', email='knownuser@example.com')
         # Set last_login to something so we can determine if it changes.
         default_login = datetime(2000, 1, 1)
         user.last_login = default_login
@@ -134,7 +134,7 @@ class CustomRemoteUserBackend(RemoteUserBackend):
         """
         Sets user's email address.
         """
-        user.email = 'user@example.com'
+        user.email = 'user6@example.com'
         user.save()
         return user
 
@@ -155,11 +155,11 @@ class RemoteUserCustomTest(RemoteUserTest):
     def test_known_user(self):
         """
         The strings passed in REMOTE_USER should be cleaned and the known users
-        should not have been configured with an email address.
+        should have the correct email addresses.
         """
         super(RemoteUserCustomTest, self).test_known_user()
-        self.assertEqual(User.objects.get(username='knownuser').email, '')
-        self.assertEqual(User.objects.get(username='knownuser2').email, '')
+        self.assertEqual(User.objects.get(username='knownuser').email, 'knownuser@example.com')
+        self.assertEqual(User.objects.get(username='knownuser2').email, 'knownuser2@example.com')
 
     def test_unknown_user(self):
         """
@@ -167,4 +167,4 @@ class RemoteUserCustomTest(RemoteUserTest):
         """
         super(RemoteUserCustomTest, self).test_unknown_user()
         newuser = User.objects.get(username='newuser')
-        self.assertEqual(newuser.email, 'user@example.com')
+        self.assertEqual(newuser.email, 'user6@example.com')
