@@ -297,7 +297,7 @@ class PasswordResetFormTest(TestCase):
     def test_custom_email_subject(self):
         template_path = os.path.join(os.path.dirname(__file__), 'templates')
         with self.settings(TEMPLATE_DIRS=(template_path,)):
-            data = {'email': 'testclient@example.com'}
+            data = {'email': 'testclient1@example.com'}
             form = PasswordResetForm(data)
             self.assertTrue(form.is_valid())
             # Since we're not providing a request object, we must provide a
