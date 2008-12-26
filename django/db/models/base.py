@@ -14,7 +14,7 @@ from django.db.models.fields.related import (ForeignObjectRel, ManyToOneRel,
     OneToOneField, add_lazy_relation)
 from django.db import (router, transaction, DatabaseError,
     DEFAULT_DB_ALIAS)
-from django.db.models.query import Q
+from django.db.models.query import Q, QuerySet
 from django.db.models.query_utils import DeferredAttribute, deferred_class_factory
 from django.db.models.deletion import Collector
 from django.db.models.options import Options
@@ -708,7 +708,7 @@ class Model(six.with_metaclass(ModelBase)):
         param = force_text(getattr(self, field.attname))
         q = Q(**{'%s__%s' % (field.name, op): param})
         q = q | Q(**{field.name: param, 'pk__%s' % op: self.pk})
-        qs = self.__class__._default_manager.using(self._state.db).filter(**kwargs).filter(q).order_by('%s%s' % (order, field.name), '%spk' % order)
+        qs = QuerySet(self.__class__).using(self._state.db).filter(**kwargs).filter(q).order_by('%s%s' % (order, field.name), '%spk' % order)
         try:
             return qs[0]
         except IndexError:
@@ -720,10 +720,10 @@ class Model(six.with_metaclass(ModelBase)):
             op = 'gt' if is_next else 'lt'
             order = '_order' if is_next else '-_order'
             order_field = self._meta.order_with_respect_to
-            obj = self._default_manager.filter(**{
+            obj = QuerySet(self.__class__).filter(**{
                 order_field.name: getattr(self, order_field.attname)
             }).filter(**{
-                '_order__%s' % op: self._default_manager.values('_order').filter(**{
+                '_order__%s' % op: QuerySet(self.__class__).values('_order').filter(**{
                     self._meta.pk.name: self.pk
                 })
             }).order_by(order)[:1].get()
