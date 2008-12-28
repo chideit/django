@@ -28,9 +28,9 @@ def permalink(func):
         (viewname, viewargs)
         (viewname, viewargs, viewkwargs)
     """
-    from django.core.urlresolvers import reverse
     @wraps(func)
     def inner(*args, **kwargs):
+        from django.core.urlresolvers import reverse
         bits = func(*args, **kwargs)
         return reverse(bits[0], None, *bits[1:3])
     return inner
