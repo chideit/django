@@ -1043,7 +1043,9 @@ class ModelMultipleChoiceField(ModelChoiceField):
         for pk in value:
             try:
                 self.queryset.filter(**{key: pk})
-            except ValueError:
+            # Bare except since we could get ValueError, ValidationError, or ???
+            # if the form-supplied data is of the wrong type for the pk field
+            except:
                 raise ValidationError(self.error_messages['invalid_pk_value'] % pk)
         qs = self.queryset.filter(**{'%s__in' % key: value})
         pks = set([force_text(getattr(o, key)) for o in qs])
