@@ -66,6 +66,8 @@ def redirect(post_save_redirect, obj):
     ``create_object`` and ``update_object`` views.
     """
     if post_save_redirect:
+        if callable(post_save_redirect):
+            return HttpResponseRedirect(post_save_redirect(obj))
         return HttpResponseRedirect(post_save_redirect % obj.__dict__)
     elif hasattr(obj, 'get_absolute_url'):
         return HttpResponseRedirect(obj.get_absolute_url())
