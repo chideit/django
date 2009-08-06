@@ -83,6 +83,8 @@ the full list of conversions:
 
     ``IPAddressField``               ``IPAddressField``
 
+    ``IP6AddressField``              ``IP6AddressField``
+
     ``ManyToManyField``              ``ModelMultipleChoiceField`` (see
                                      below)
 

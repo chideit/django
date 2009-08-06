@@ -21,6 +21,7 @@ from django.utils import formats
 from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import smart_unicode, smart_str
 from django.utils.functional import lazy
+from django.utils.http import ip6_normalize
 
 # Provide this import for backwards compatibility.
 from django.core.validators import EMPTY_VALUES
@@ -38,7 +39,7 @@ __all__ = (
     'BooleanField', 'NullBooleanField', 'ChoiceField', 'MultipleChoiceField',
     'ComboField', 'MultiValueField', 'FloatField', 'DecimalField',
     'SplitDateTimeField', 'IPAddressField', 'FilePathField', 'SlugField',
-    'TypedChoiceField', 'TypedMultipleChoiceField'
+    'TypedChoiceField', 'TypedMultipleChoiceField', 'IP6AddressField'
 )
 
 def en_format(name):
@@ -936,6 +937,26 @@ class IPAddressField(CharField):
     }
     default_validators = [validators.validate_ipv4_address]
 
+class IP6AddressField(CharField):
+    default_error_messages = {
+        'invalid': _(u'Enter a valid IP address.'),
+    }
+
+    def __init__(self, *args, **kwargs):
+        super(IP6AddressField, self).__init__(39, 3, *args, **kwargs)
+
+    def clean(self, value):
+        value = super(IP6AddressField, self).clean(value)
+        if value == u'':
+            return value
+        if not validators.ipv4_re.search(value):
+            try:
+                ip = ip6_normalize(value)
+                if not validators.ipv6_re.search(ip):
+                    raise ValidationError(self.error_messages['invalid'])
+            except ValueError:
+                raise ValidationError(self.error_messages['invalid'])
+        return value
 
 class SlugField(CharField):
     default_error_messages = {

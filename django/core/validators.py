@@ -161,6 +161,9 @@ validate_slug = RegexValidator(slug_re, _(u"Enter a valid 'slug' consisting of l
 ipv4_re = re.compile(r'^(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}$')
 validate_ipv4_address = RegexValidator(ipv4_re, _(u'Enter a valid IPv4 address.'), 'invalid')
 
+ipv6_re = re.compile(r'^[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){7}$')
+validate_ipv6_address = RegexValidator(ipv6_re, _(u'Enter a valid IPv6 address.'), 'invalid')
+
 comma_separated_int_list_re = re.compile('^[\d,]+$')
 validate_comma_separated_integer_list = RegexValidator(comma_separated_int_list_re, _(u'Enter only digits separated by commas.'), 'invalid')
 

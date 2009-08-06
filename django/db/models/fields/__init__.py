@@ -925,6 +925,21 @@ class IPAddressField(Field):
         defaults.update(kwargs)
         return super(IPAddressField, self).formfield(**defaults)
 
+class IP6AddressField(Field):
+    empty_strings_allowed = False
+    def __init__(self, *args, **kwargs):
+        kwargs['max_length'] = 39
+        Field.__init__(self, *args, **kwargs)
+
+    def get_internal_type(self):
+        return "IP6AddressField"
+
+    def formfield(self, **kwargs):
+        defaults = {'form_class': forms.IP6AddressField}
+        defaults.update(kwargs)
+        return super(IP6AddressField, self).formfield(**defaults)
+
+
 class NullBooleanField(Field):
     empty_strings_allowed = False
     default_error_messages = {

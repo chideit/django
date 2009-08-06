@@ -747,8 +747,17 @@ single-line input).
 
 .. class:: IPAddressField([**options])
 
-An IP address, in string format (e.g. "192.0.2.30"). The admin represents this
+An IPv4 address, in string format (e.g. "192.0.2.30"). The admin represents this
 as an ``<input type="text">`` (a single-line input).
+
+``IP6AddressField``
+------------------
+
+.. class:: IP6AddressField([**options])
+
+An IPv4 or IPv6 address, in string format (e.g. "192.0.2.30" or 
+"2a01:5d8:25ae:9451:20d:39bc:1e6:cab:b2c"). The admin represents this as an 
+``<input type="text">`` (a single-line input).
 
 ``NullBooleanField``
 --------------------

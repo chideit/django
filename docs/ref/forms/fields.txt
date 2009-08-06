@@ -617,6 +617,19 @@ Takes two optional arguments for validation:
       expression.
     * Error message keys: ``required``, ``invalid``
 
+``IP6AddressField``
+~~~~~~~~~~~~~~~~~~
+
+.. class:: IP6AddressField(**kwargs)
+
+    * Default widget: ``TextInput``
+    * Empty value: ``''`` (an empty string)
+    * Normalizes to: A Unicode object.
+    * Validates that the given value is a valid IPv4 or IPv6 address, using 
+      a regular expression.
+    * Error message keys: ``required``, ``invalid``
+
+
 ``MultipleChoiceField``
 ~~~~~~~~~~~~~~~~~~~~~~~
 

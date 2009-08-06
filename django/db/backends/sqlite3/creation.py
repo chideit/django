@@ -20,6 +20,7 @@ class DatabaseCreation(BaseDatabaseCreation):
         'IntegerField':                 'integer',
         'BigIntegerField':              'bigint',
         'IPAddressField':               'char(15)',
+        'IP6AddressField':              'char(39)',
         'NullBooleanField':             'bool',
         'OneToOneField':                'integer',
         'PositiveIntegerField':         'integer unsigned',

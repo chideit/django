@@ -216,3 +216,54 @@ def is_safe_url(url, host=None):
         return False
     netloc = urlparse.urlparse(url)[1]
     return not netloc or netloc == host
+
+def ip6_normalize(addr):
+    """
+    Normalize an IPv6 address to allow easy regexp validation
+    mostly checks the length, and gets ride of tricky things
+    like IPv4 mapped addresses and :: shortcuts
+
+    Outputs a string
+    """
+    # Some basic error checking
+    if addr.count('::') > 2 or ':::' in addr:
+        raise ValueError
+
+    ip = addr.split(':')
+    nbfull = len([elem for elem in ip if elem != ''])
+    nb = len(ip)
+
+    if nbfull >= 1 and '.' in ip[-1]:
+        # Convert IPv4 mapped addresses to full hexa
+        ipv4 = ip[-1].split('.')
+        hex1 = (int(ipv4[0]) << 8) + int(ipv4[1])
+        hex2 = (int(ipv4[2]) << 8) + int(ipv4[3])
+        ip[-1:] = [hex(hex1)[2:], hex(hex2)[2:]]
+        nbfull = nbfull + 1
+        nb = nb + 1
+
+    if nbfull == 8 or nbfull == nb:
+        # No need to bother
+        return addr
+    elif nbfull > 8:
+        # Has to be invalid anyway
+        raise ValueError
+
+    # Begin normalization
+    start, end, index = (None, None, 0)
+    for elem in ip:
+        if elem == '':
+            if start is None:
+                start = index
+                end = index
+            else:
+                end = index
+        index += 1
+    pad = 8 - nbfull
+    if end != start:
+        ip[start:end-start+1] = ['0'] * pad
+    else:
+        ip[start] = '0'
+        if pad > 1:
+            ip[start:1] = ['0'] * (pad - 1)
+    return ':'.join([item for item in ip if len(item) > 0])
