@@ -80,10 +80,14 @@ class ChangeList(object):
         filter_specs = []
         if self.list_filter:
             for filter_name in self.list_filter:
-                field = get_fields_from_path(self.model, filter_name)[-1]
-                spec = FilterSpec.create(field, request, self.params,
-                                         self.model, self.model_admin,
-                                         field_path=filter_name)
+                if isinstance(filter_name, models.Field):
+                    spec = FilterSpec.create(filter_name, request, self.params,
+                                             self.model, self.model_admin)
+                else:
+                    field = get_fields_from_path(self.model, filter_name)[-1]
+                    spec = FilterSpec.create(field, request, self.params,
+                                             self.model, self.model_admin,
+                                             field_path=filter_name)
                 if spec and spec.has_output():
                     filter_specs.append(spec)
         return filter_specs, bool(filter_specs)
