@@ -55,6 +55,8 @@ def validate(cls, model):
     if hasattr(cls, 'list_filter'):
         check_isseq(cls, 'list_filter', cls.list_filter)
         for idx, fpath in enumerate(cls.list_filter):
+            if isinstance(field, models.Field):
+                continue
             try:
                 get_fields_from_path(model, fpath)
             except (NotRelationField, FieldDoesNotExist), e:
