@@ -134,5 +134,6 @@ class Command(BaseRunserverCommand):
         """
         Serves admin media like old-school (deprecation pending).
         """
+        from django.conf import settings
         handler = super(Command, self).get_handler(*args, **options)
-        return AdminMediaHandler(handler, options.get('admin_media_path', ''))
+        return AdminMediaHandler(handler, getattr(settings, 'ADMIN_MEDIA_ROOT', options.get('admin_media_path', '')))
