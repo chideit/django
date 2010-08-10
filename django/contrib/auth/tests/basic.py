@@ -92,4 +92,3 @@ class BasicTestCase(TestCase):
         u = User.objects.get(username="joe+admin@somewhere.org")
         self.assertEqual(u.email, 'joe@somewhere.org')
         self.assertFalse(u.has_usable_password())
-
