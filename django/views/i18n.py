@@ -139,8 +139,8 @@ function pluralidx(count) { return (count == 1) ? 0 : 1; }
 """
 
 InterPolate = r"""
-function interpolate(fmt, obj, named) {
-  if (named) {
+function interpolate(fmt, obj) {
+  if (obj.constructor.toString().indexOf('Object') != -1) {
     return fmt.replace(/%\(\w+\)s/g, function(match){return String(obj[match.slice(2,-2)])});
   } else {
     return fmt.replace(/%s/g, function(match){return String(obj.shift())});
