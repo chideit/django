@@ -63,9 +63,24 @@ class BaseCache(object):
         except (ValueError, TypeError):
             self._cull_frequency = 3
 
-        self.key_prefix = smart_str(params.get('KEY_PREFIX', ''))
+        self._key_prefix = smart_str(params.get('KEY_PREFIX', ''))
         self.version = params.get('VERSION', 1)
         self.key_func = get_key_func(params.get('KEY_FUNCTION', None))
+
+    @property
+    def key_prefix(self):
+        return self.__dict__.get('key_prefix', self._key_prefix)
+
+    @key_prefix.setter
+    def key_prefix(self, value):
+        self.__dict__['key_prefix'] = smart_str(value)
+
+    @key_prefix.deleter
+    def key_prefix(self):
+        self.__dict__.pop('key_prefix', None)
+
+    def smart_str(self, key):
+        return self.key_prefix + smart_str(key)
 
     def make_key(self, key, version=None):
         """Constructs the key used by all other methods. By default it
