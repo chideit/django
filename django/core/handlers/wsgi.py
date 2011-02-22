@@ -225,7 +225,7 @@ class WSGIHandler(base.BaseHandler):
                 self.initLock.release()
 
         set_script_prefix(base.get_script_name(environ))
-        signals.request_started.send(sender=self.__class__)
+
         try:
             try:
                 request = self.request_class(environ)
@@ -236,8 +236,10 @@ class WSGIHandler(base.BaseHandler):
                         'status_code': 400,
                     }
                 )
+                signals.request_started.send(sender=self.__class__)
                 response = http.HttpResponseBadRequest()
             else:
+                signals.request_started.send(sender=self.__class__, request=request)
                 response = self.get_response(request)
         finally:
             signals.request_finished.send(sender=self.__class__)
