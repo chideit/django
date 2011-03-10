@@ -100,6 +100,7 @@ class TranslatableFile(object):
                 '-d', domain,
                 '--language=Python',
                 '--keyword=gettext_noop',
+                '--keyword=__',
                 '--keyword=gettext_lazy',
                 '--keyword=ngettext_lazy:1,2',
                 '--keyword=ugettext_noop',
