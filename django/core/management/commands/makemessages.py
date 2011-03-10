@@ -195,7 +195,7 @@ def process_file(file, dirpath, potfile, domain, verbosity,
         work_file = os.path.join(dirpath, thefile)
         cmd = (
             'xgettext -d %s -L Python %s %s --keyword=gettext_noop '
-            '--keyword=gettext_lazy --keyword=ngettext_lazy:1,2 '
+            '--keyword=gettext_lazy --keyword=__ --keyword=ngettext_lazy:1,2 '
             '--keyword=ugettext_noop --keyword=ugettext_lazy '
             '--keyword=ungettext_lazy:1,2 --keyword=pgettext:1c,2 '
             '--keyword=npgettext:1c,2,3 --keyword=pgettext_lazy:1c,2 '
