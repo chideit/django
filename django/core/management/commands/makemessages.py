@@ -489,6 +489,7 @@ class Command(BaseCommand):
                 'xgettext',
                 '-d', self.domain,
                 '--language=Python',
+                '--keyword=__',
                 '--keyword=gettext_noop',
                 '--keyword=gettext_lazy',
                 '--keyword=ngettext_lazy:1,2',
