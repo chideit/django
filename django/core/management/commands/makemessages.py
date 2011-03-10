@@ -237,7 +237,7 @@ def make_messages(locale=None, domain='django', verbosity='1', all=False,
                     sys.stdout.write('processing file %s in %s\n' % (file, dirpath))
                 cmd = (
                     'xgettext -d %s -L Python %s --keyword=gettext_noop '
-                    '--keyword=gettext_lazy --keyword=ngettext_lazy:1,2 '
+                    '--keyword=gettext_lazy --keyword=__ --keyword=ngettext_lazy:1,2 '
                     '--keyword=ugettext_noop --keyword=ugettext_lazy '
                     '--keyword=ungettext_lazy:1,2 --keyword=pgettext:1c,2 '
                     '--keyword=npgettext:1c,2,3 --keyword=pgettext_lazy:1c,2 '
