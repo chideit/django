@@ -230,7 +230,7 @@ class EmailMessage(object):
         if 'message-id' not in header_names:
             msg['Message-ID'] = make_msgid()
         for name, value in self.extra_headers.items():
-            if name.lower() == 'from':  # From is already handled
+            if name.lower() == 'from' or name.lower() == 'bcc':  # From is already handled, having bcc in the headers defeats the purpose of bcc
                 continue
             msg[name] = value
         return msg
