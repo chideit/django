@@ -282,7 +282,7 @@ class EmailMessage(object):
             # Use cached DNS_NAME for performance
             msg['Message-ID'] = make_msgid(domain=DNS_NAME)
         for name, value in self.extra_headers.items():
-            if name.lower() in ('from', 'to'):  # From and To are already handled
+            if name.lower() in ('from', 'to', 'bcc'):  # From and To are already handled, having bcc in the headers defeats the purpose of bcc
                 continue
             msg[name] = value
         return msg
