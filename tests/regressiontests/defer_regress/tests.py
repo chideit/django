@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.sessions.backends.db import SessionStore
 from django.db import connection
+from django.db.models import Count
 from django.db.models.loading import cache
 from django.test import TestCase
 
@@ -145,6 +146,10 @@ class DeferRegressionTest(TestCase):
                 "ResolveThis",
             ]
         )
+
+        # Regression for #16409 - make sure defer() and only() work with annotate()
+        self.assertIsInstance(list(Item.objects.annotate(Count('relateditem')).defer('name')), list)
+        self.assertIsInstance(list(Item.objects.annotate(Count('relateditem')).only('name')), list)
 
     def test_resolve_columns(self):
         rt = ResolveThis.objects.create(num=5.0, name='Foobar')
