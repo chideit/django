@@ -112,6 +112,9 @@ msgstr "Finlandais"
 msgid "French"
 msgstr "Français"
 
+msgid "French (Canadian)"
+msgstr "Français (Canadien)"
+
 #: conf/global_settings.py:71
 msgid "Frisian"
 msgstr "Frise"
