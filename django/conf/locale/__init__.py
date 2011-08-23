@@ -466,6 +466,12 @@ LANG_INFO = {
         'name': 'Vietnamese',
         'name_local': 'Vietnamese',
     },
+    'zh': {
+        'bidi': False,
+        'code': 'zh-cn',
+        'name': 'Simplified Chinese',
+        'name_local': u'\u7b80\u4f53\u4e2d\u6587',
+     },
     'zh-cn': {
         'bidi': False,
         'code': 'zh-cn',
