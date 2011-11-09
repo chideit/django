@@ -141,10 +141,15 @@ def make_messages(locale=None, domain='django', verbosity='1', all=False,
     else:
         raise CommandError("This script should be run from the Django SVN tree or your project or app tree. If you did indeed run it from the SVN checkout or your project or application, maybe you are just missing the conf/locale (in the django tree) or locale (for project and application) directory? It is not created automatically, you have to create it by hand if you want to enable i18n for your project or application.")
 
-    if domain not in ('django', 'djangojs'):
+    if domain is None:
+	    domains = ['django']
+    else:
+        domains = [domain] if not isinstance(domain, list) else domain
+
+    if any(d not in ('django', 'djangojs') for d in domains):
         raise CommandError("currently makemessages only supports domains 'django' and 'djangojs'")
 
-    if (locale is None and not all) or domain is None:
+    if (locale is None and not all) or not domains:
         message = "Type '%s help %s' for usage information." % (os.path.basename(sys.argv[0]), sys.argv[1])
         raise CommandError(message)
 
@@ -158,162 +163,162 @@ def make_messages(locale=None, domain='django', verbosity='1', all=False,
 
     languages = []
     if locale is not None:
-        languages.append(locale)
+        languages += [locale] if not isinstance(locale, list) else locale
     elif all:
         locale_dirs = filter(os.path.isdir, glob.glob('%s/*' % localedir))
         languages = [os.path.basename(l) for l in locale_dirs]
 
     wrap = no_wrap and '--no-wrap' or ''
-
-    for locale in languages:
-        if verbosity > 0:
-            print "processing language", locale
-        basedir = os.path.join(localedir, locale, 'LC_MESSAGES')
-        if not os.path.isdir(basedir):
-            os.makedirs(basedir)
-
-        pofile = os.path.join(basedir, '%s.po' % domain)
-        potfile = os.path.join(basedir, '%s.pot' % domain)
-
-        if os.path.exists(potfile):
-            os.unlink(potfile)
-
-        for dirpath, file in find_files(".", ignore_patterns, verbosity, symlinks=symlinks):
-            file_base, file_ext = os.path.splitext(file)
-            if domain == 'djangojs' and file_ext in extensions:
-                if verbosity > 1:
-                    sys.stdout.write('processing file %s in %s\n' % (file, dirpath))
-                src = open(os.path.join(dirpath, file), "rU").read()
-                src = pythonize_re.sub('\n#', src)
-                thefile = '%s.py' % file
-                f = open(os.path.join(dirpath, thefile), "w")
-                try:
-                    f.write(src)
-                finally:
-                    f.close()
-                cmd = (
-                    'xgettext -d %s -L Perl %s --keyword=gettext_noop '
-                    '--keyword=gettext_lazy --keyword=ngettext_lazy:1,2 '
-                    '--keyword=pgettext:1c,2 --keyword=npgettext:1c,2,3 '
-                    '--from-code UTF-8 --add-comments=Translators -o - "%s"' % (
-                        domain, wrap, os.path.join(dirpath, thefile)
-                    )
-                )
-                msgs, errors = _popen(cmd)
-                if errors:
-                    os.unlink(os.path.join(dirpath, thefile))
-                    if os.path.exists(potfile):
-                        os.unlink(potfile)
-                    raise CommandError(
-                        "errors happened while running xgettext on %s\n%s" %
-                        (file, errors))
-                if msgs:
-                    old = '#: ' + os.path.join(dirpath, thefile)[2:]
-                    new = '#: ' + os.path.join(dirpath, file)[2:]
-                    msgs = msgs.replace(old, new)
-                    if os.path.exists(potfile):
-                        # Strip the header
-                        msgs = '\n'.join(dropwhile(len, msgs.split('\n')))
-                    else:
-                        msgs = msgs.replace('charset=CHARSET', 'charset=UTF-8')
-                    f = open(potfile, 'ab')
-                    try:
-                        f.write(msgs)
-                    finally:
-                        f.close()
-                os.unlink(os.path.join(dirpath, thefile))
-            elif domain == 'django' and (file_ext == '.py' or file_ext in extensions):
-                thefile = file
-                orig_file = os.path.join(dirpath, file)
-                if file_ext in extensions:
-                    src = open(orig_file, "rU").read()
+    for domain in domains:
+        for locale in languages:
+            if verbosity > 0:
+                print "processing domain %s for language %s" % (domain, locale)
+            basedir = os.path.join(localedir, locale, 'LC_MESSAGES')
+            if not os.path.isdir(basedir):
+                os.makedirs(basedir)
+    
+            pofile = os.path.join(basedir, '%s.po' % domain)
+            potfile = os.path.join(basedir, '%s.pot' % domain)
+    
+            if os.path.exists(potfile):
+                os.unlink(potfile)
+    
+            for dirpath, file in find_files(".", ignore_patterns, verbosity, symlinks=symlinks):
+                file_base, file_ext = os.path.splitext(file)
+                if domain == 'djangojs' and file_ext in extensions:
+                    if verbosity > 1:
+                        sys.stdout.write('processing file %s in %s\n' % (file, dirpath))
+                    src = open(os.path.join(dirpath, file), "rU").read()
+                    src = pythonize_re.sub('\n#', src)
                     thefile = '%s.py' % file
                     f = open(os.path.join(dirpath, thefile), "w")
                     try:
-                        f.write(templatize(src, orig_file[2:]))
+                        f.write(src)
                     finally:
                         f.close()
-                if verbosity > 1:
-                    sys.stdout.write('processing file %s in %s\n' % (file, dirpath))
-                cmd = (
-                    'xgettext -d %s -L Python %s --keyword=gettext_noop '
-                    '--keyword=gettext_lazy --keyword=__ --keyword=ngettext_lazy:1,2 '
-                    '--keyword=ugettext_noop --keyword=ugettext_lazy '
-                    '--keyword=ungettext_lazy:1,2 --keyword=pgettext:1c,2 '
-                    '--keyword=npgettext:1c,2,3 --keyword=pgettext_lazy:1c,2 '
-                    '--keyword=npgettext_lazy:1c,2,3 --from-code UTF-8 '
-                    '--add-comments=Translators -o - "%s"' % (
-                        domain, wrap, os.path.join(dirpath, thefile))
-                )
-                msgs, errors = _popen(cmd)
-                if errors:
+                    cmd = (
+                        'xgettext -d %s -L Perl %s --keyword=gettext_noop '
+                        '--keyword=gettext_lazy --keyword=ngettext_lazy:1,2 '
+                        '--keyword=pgettext:1c,2 --keyword=npgettext:1c,2,3 '
+                        '--from-code UTF-8 --add-comments=Translators -o - "%s"' % (
+                            domain, wrap, os.path.join(dirpath, thefile)
+                        )
+                    )
+                    msgs, errors = _popen(cmd)
+                    if errors:
+                        os.unlink(os.path.join(dirpath, thefile))
+                        if os.path.exists(potfile):
+                            os.unlink(potfile)
+                        raise CommandError(
+                            "errors happened while running xgettext on %s\n%s" %
+                            (file, errors))
+                    if msgs:
+                        old = '#: ' + os.path.join(dirpath, thefile)[2:]
+                        new = '#: ' + os.path.join(dirpath, file)[2:]
+                        msgs = msgs.replace(old, new)
+                        if os.path.exists(potfile):
+                            # Strip the header
+                            msgs = '\n'.join(dropwhile(len, msgs.split('\n')))
+                        else:
+                            msgs = msgs.replace('charset=CHARSET', 'charset=UTF-8')
+                        f = open(potfile, 'ab')
+                        try:
+                            f.write(msgs)
+                        finally:
+                            f.close()
+                    os.unlink(os.path.join(dirpath, thefile))
+                elif domain == 'django' and (file_ext == '.py' or file_ext in extensions):
+                    thefile = file
+                    orig_file = os.path.join(dirpath, file)
+                    if file_ext in extensions:
+                        src = open(orig_file, "rU").read()
+                        thefile = '%s.py' % file
+                        f = open(os.path.join(dirpath, thefile), "w")
+                        try:
+                            f.write(templatize(src, orig_file[2:]))
+                        finally:
+                            f.close()
+                    if verbosity > 1:
+                        sys.stdout.write('processing file %s in %s\n' % (file, dirpath))
+                    cmd = (
+                        'xgettext -d %s -L Python %s --keyword=gettext_noop '
+                        '--keyword=gettext_lazy --keyword=__ --keyword=ngettext_lazy:1,2 '
+                        '--keyword=ugettext_noop --keyword=ugettext_lazy '
+                        '--keyword=ungettext_lazy:1,2 --keyword=pgettext:1c,2 '
+                        '--keyword=npgettext:1c,2,3 --keyword=pgettext_lazy:1c,2 '
+                        '--keyword=npgettext_lazy:1c,2,3 --from-code UTF-8 '
+                        '--add-comments=Translators -o - "%s"' % (
+                            domain, wrap, os.path.join(dirpath, thefile))
+                    )
+                    msgs, errors = _popen(cmd)
+                    if errors:
+                        if thefile != file:
+                            os.unlink(os.path.join(dirpath, thefile))
+                        if os.path.exists(potfile):
+                            os.unlink(potfile)
+                        raise CommandError(
+                            "errors happened while running xgettext on %s\n%s" %
+                            (file, errors))
+                    if msgs:
+                        if thefile != file:
+                            old = '#: ' + os.path.join(dirpath, thefile)[2:]
+                            new = '#: ' + orig_file[2:]
+                            msgs = msgs.replace(old, new)
+                        if os.path.exists(potfile):
+                            # Strip the header
+                            msgs = '\n'.join(dropwhile(len, msgs.split('\n')))
+                        else:
+                            msgs = msgs.replace('charset=CHARSET', 'charset=UTF-8')
+                        f = open(potfile, 'ab')
+                        try:
+                            f.write(msgs)
+                        finally:
+                            f.close()
                     if thefile != file:
                         os.unlink(os.path.join(dirpath, thefile))
-                    if os.path.exists(potfile):
-                        os.unlink(potfile)
+    
+            if os.path.exists(potfile):
+                msgs, errors = _popen('msguniq %s --to-code=utf-8 "%s"' %
+                                      (wrap, potfile))
+                if errors:
+                    os.unlink(potfile)
                     raise CommandError(
-                        "errors happened while running xgettext on %s\n%s" %
-                        (file, errors))
-                if msgs:
-                    if thefile != file:
-                        old = '#: ' + os.path.join(dirpath, thefile)[2:]
-                        new = '#: ' + orig_file[2:]
-                        msgs = msgs.replace(old, new)
-                    if os.path.exists(potfile):
-                        # Strip the header
-                        msgs = '\n'.join(dropwhile(len, msgs.split('\n')))
-                    else:
-                        msgs = msgs.replace('charset=CHARSET', 'charset=UTF-8')
-                    f = open(potfile, 'ab')
+                        "errors happened while running msguniq\n%s" % errors)
+                if os.path.exists(pofile):
+                    f = open(potfile, 'w')
                     try:
                         f.write(msgs)
                     finally:
                         f.close()
-                if thefile != file:
-                    os.unlink(os.path.join(dirpath, thefile))
-
-        if os.path.exists(potfile):
-            msgs, errors = _popen('msguniq %s --to-code=utf-8 "%s"' %
-                                  (wrap, potfile))
-            if errors:
-                os.unlink(potfile)
-                raise CommandError(
-                    "errors happened while running msguniq\n%s" % errors)
-            if os.path.exists(pofile):
-                f = open(potfile, 'w')
+                    msgs, errors = _popen('msgmerge %s -q "%s" "%s"' %
+                                          (wrap, pofile, potfile))
+                    if errors:
+                        os.unlink(potfile)
+                        raise CommandError(
+                            "errors happened while running msgmerge\n%s" % errors)
+                elif not invoked_for_django:
+                    msgs = copy_plural_forms(msgs, locale, domain, verbosity)
+                msgs = msgs.replace(
+                    "#. #-#-#-#-#  %s.pot (PACKAGE VERSION)  #-#-#-#-#\n" % domain, "")
+                f = open(pofile, 'wb')
                 try:
                     f.write(msgs)
                 finally:
                     f.close()
-                msgs, errors = _popen('msgmerge %s -q "%s" "%s"' %
-                                      (wrap, pofile, potfile))
-                if errors:
-                    os.unlink(potfile)
-                    raise CommandError(
-                        "errors happened while running msgmerge\n%s" % errors)
-            elif not invoked_for_django:
-                msgs = copy_plural_forms(msgs, locale, domain, verbosity)
-            msgs = msgs.replace(
-                "#. #-#-#-#-#  %s.pot (PACKAGE VERSION)  #-#-#-#-#\n" % domain, "")
-            f = open(pofile, 'wb')
-            try:
-                f.write(msgs)
-            finally:
-                f.close()
-            os.unlink(potfile)
-            if no_obsolete:
-                msgs, errors = _popen('msgattrib %s -o "%s" --no-obsolete "%s"' %
-                                      (wrap, pofile, pofile))
-                if errors:
-                    raise CommandError(
-                        "errors happened while running msgattrib\n%s" % errors)
+                os.unlink(potfile)
+                if no_obsolete:
+                    msgs, errors = _popen('msgattrib %s -o "%s" --no-obsolete "%s"' %
+                                          (wrap, pofile, pofile))
+                    if errors:
+                        raise CommandError(
+                            "errors happened while running msgattrib\n%s" % errors)
 
 
 class Command(NoArgsCommand):
     option_list = NoArgsCommand.option_list + (
-        make_option('--locale', '-l', default=None, dest='locale',
+        make_option('--locale', '-l', default=None, dest='locale', action="append",
             help='Creates or updates the message files for the given locale (e.g. pt_BR).'),
-        make_option('--domain', '-d', default='django', dest='domain',
+        make_option('--domain', '-d', default=None, dest='domain', action="append",
             help='The domain of the message files (default: "django").'),
         make_option('--all', '-a', action='store_true', dest='all',
             default=False, help='Updates the message files for all existing locales.'),
