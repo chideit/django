@@ -1,8 +1,12 @@
-# This file is distributed under the same license as the Django package.
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
+#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Django\n"
+"Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2011-11-08 23:15-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1050,23 +1054,23 @@ msgstr ""
 
 #: utils/translation/trans_real.py:578
 msgid "DATE_FORMAT"
-msgstr "N j, Y"
+msgstr ""
 
 #: utils/translation/trans_real.py:579
 msgid "DATETIME_FORMAT"
-msgstr "N j, Y, P"
+msgstr ""
 
 #: utils/translation/trans_real.py:580
 msgid "TIME_FORMAT"
-msgstr "P"
+msgstr ""
 
 #: utils/translation/trans_real.py:601
 msgid "YEAR_MONTH_FORMAT"
-msgstr "F Y"
+msgstr ""
 
 #: utils/translation/trans_real.py:602
 msgid "MONTH_DAY_FORMAT"
-msgstr "F j"
+msgstr ""
 
 #: views/generic/create_update.py:123
 #, python-format
