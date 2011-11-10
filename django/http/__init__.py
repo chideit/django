@@ -260,7 +260,7 @@ class HttpRequest(object):
             if content_length:
                 self._raw_post_data = self.read(content_length)
             else:
-                self._raw_post_data = self.read()
+                self._raw_post_data = ''
             self._stream = StringIO(self._raw_post_data)
         return self._raw_post_data
     raw_post_data = property(_get_raw_post_data)
