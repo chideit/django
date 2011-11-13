@@ -272,7 +272,7 @@ class HttpRequest(object):
 
     def _load_post_and_files(self):
         # Populates self._post and self._files
-        if self.method != 'POST':
+        if self.method != 'POST' and 'CONTENT_LENGTH' not in self.META and 'TRANSFER_ENCODING' not in self.META:
             self._post, self._files = QueryDict('', encoding=self._encoding), MultiValueDict()
             return
         if self._read_started and not hasattr(self, '_raw_post_data'):
