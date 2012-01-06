@@ -73,6 +73,7 @@ LANGUAGES = (
     ('he', gettext_noop('Hebrew')),
     ('hi', gettext_noop('Hindi')),
     ('hr', gettext_noop('Croatian')),
+    ('ht', gettext_noop('Haitian Creole')),
     ('hu', gettext_noop('Hungarian')),
     ('id', gettext_noop('Indonesian')),
     ('is', gettext_noop('Icelandic')),
