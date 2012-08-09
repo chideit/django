@@ -332,7 +332,7 @@ msgstr "Exécuter l'action sélectionnée"
 
 #: templates/admin/actions.html:4
 msgid "Go"
-msgstr "Envoyer"
+msgstr "Aller"
 
 #: templates/admin/actions.html:11
 msgid "Click here to select the objects across all pages"
