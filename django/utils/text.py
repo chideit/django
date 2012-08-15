@@ -5,7 +5,9 @@ import unicodedata
 from gzip import GzipFile
 from io import BytesIO
 
-from django.utils.encoding import force_text
+# Import force_unicode even though this module doesn't use it, because some
+# people rely on it being here.
+from django.utils.encoding import force_text, force_unicode
 from django.utils.functional import allow_lazy, SimpleLazyObject
 from django.utils import six
 from django.utils.six.moves import html_entities
