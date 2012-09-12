@@ -16,7 +16,13 @@ PREFERRED_HASHER = None  # defaults to first item in PASSWORD_HASHERS
 
 
 def is_password_usable(encoded):
-    return (encoded is not None and encoded != UNUSABLE_PASSWORD)
+    if encoded is None or encoded == UNUSABLE_PASSWORD:
+        return False
+    try:
+        hasher = identify_hasher(encoded)
+    except ValueError, e:
+        return False
+    return True
 
 
 def check_password(password, encoded, setter=None, preferred='default'):
@@ -46,7 +52,6 @@ def check_password(password, encoded, setter=None, preferred='default'):
     else:
         algorithm = encoded.split('$', 1)[0]
         hasher = get_hasher(algorithm)
-
     must_update = hasher.algorithm != preferred.algorithm
     is_correct = hasher.verify(password, encoded)
     if setter and is_correct and must_update:
@@ -121,6 +126,19 @@ def get_hasher(algorithm='default'):
                              "setting?" % algorithm)
         return HASHERS[algorithm]
 
+def identify_hasher(encoded):
+    """
+    Returns an instance of a loaded password hasher.
+
+    Identifies hasher algorithm by examining encoded hash, and calls
+    get_hasher() to return hasher. Raises ValueError if
+    algorithm cannot be identified, or if hasher is not loaded.
+    """
+    if len(encoded) == 32 and '$' not in encoded:
+        algorithm = 'unsalted_md5'
+    else:
+        algorithm = encoded.split('$', 1)[0]
+    return get_hasher(algorithm)
 
 def mask_hash(hash, show=6, char="*"):
     """
