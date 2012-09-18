@@ -619,11 +619,11 @@ class Model(six.with_metaclass(ModelBase)):
                 # Determine if we should do an update (pk already exists, forced update,
                 # no force_insert)
                 if ((force_update or update_fields) or (not force_insert and
-                        manager.using(using).filter(pk=pk_val).exists())):
+                        QuerySet(cls).using(using).filter(pk=pk_val).exists())):
                     if force_update or non_pks:
                         values = [(f, None, (raw and getattr(self, f.attname) or f.pre_save(self, False))) for f in non_pks]
                         if values:
-                            rows = manager.using(using).filter(pk=pk_val)._update(values)
+                            rows = QuerySet(cls).using(using).filter(pk=pk_val)._update(values)
                             if force_update and not rows:
                                 raise DatabaseError("Forced update did not affect any rows.")
                             if update_fields and not rows:
