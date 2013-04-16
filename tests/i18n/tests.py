@@ -617,12 +617,14 @@ class FormattingTests(TestCase):
                 SelectDateWidget(years=range(2009, 2019)).render('mydate', datetime.date(2009, 12, 31))
             )
 
+        from django.conf.locale.en.formats import DATE_FORMAT
+
         # English locale
         with translation.override('en', deactivate=True):
-            self.assertEqual('N j, Y', get_format('DATE_FORMAT'))
+            self.assertEqual(DATE_FORMAT, get_format('DATE_FORMAT'))
             self.assertEqual(0, get_format('FIRST_DAY_OF_WEEK'))
             self.assertEqual('.', get_format('DECIMAL_SEPARATOR'))
-            self.assertEqual('Dec. 31, 2009', date_format(self.d))
+            self.assertEqual('Dec 31, 2009', date_format(self.d))
             self.assertEqual('December 2009', date_format(self.d, 'YEAR_MONTH_FORMAT'))
             self.assertEqual('12/31/2009 8:50 p.m.', date_format(self.dt, 'SHORT_DATETIME_FORMAT'))
             self.assertEqual('No localizable', localize('No localizable'))
@@ -636,7 +638,7 @@ class FormattingTests(TestCase):
                 self.assertEqual('66666.666', localize(self.n))
                 self.assertEqual('99999.999', localize(self.f))
                 self.assertEqual('10000', localize(self.l))
-                self.assertEqual('Dec. 31, 2009', localize(self.d))
+                self.assertEqual('Dec 31, 2009', localize(self.d))
                 self.assertEqual('Dec. 31, 2009, 8:50 p.m.', localize(self.dt))
 
             with self.settings(USE_THOUSAND_SEPARATOR=True):
@@ -647,7 +649,7 @@ class FormattingTests(TestCase):
             with self.settings(USE_THOUSAND_SEPARATOR=False):
                 self.assertEqual('66666.666', Template('{{ n }}').render(self.ctxt))
                 self.assertEqual('99999.999', Template('{{ f }}').render(self.ctxt))
-                self.assertEqual('Dec. 31, 2009', Template('{{ d }}').render(self.ctxt))
+                self.assertEqual('Dec 31, 2009', Template('{{ d }}').render(self.ctxt))
                 self.assertEqual('Dec. 31, 2009, 8:50 p.m.', Template('{{ dt }}').render(self.ctxt))
                 self.assertEqual('66666.67', Template('{{ n|floatformat:2 }}').render(self.ctxt))
                 self.assertEqual('100000.0', Template('{{ f|floatformat }}').render(self.ctxt))
