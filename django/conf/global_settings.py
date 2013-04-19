@@ -45,6 +45,7 @@ LANGUAGE_CODE = 'en-us'
 # Languages we provide translations for, out of the box. The language name
 # should be the utf-8 encoded local name for the language.
 LANGUAGES = (
+    ('af', gettext_noop('Afrikaans')),
     ('ar', gettext_noop('Arabic')),
     ('az', gettext_noop('Azerbaijani')),
     ('bg', gettext_noop('Bulgarian')),
