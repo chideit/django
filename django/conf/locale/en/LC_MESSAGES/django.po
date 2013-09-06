@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Django\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-07-25 16:43+0000\n"
+"POT-Creation-Date: 2013-09-06 00:35-0400\n"
 "PO-Revision-Date: 2010-05-13 15:35+0200\n"
 "Last-Translator: Django team\n"
 "Language-Team: English <en@li.org>\n"
@@ -66,259 +66,283 @@ msgid "English"
 msgstr ""
 
 #: conf/global_settings.py:61
-msgid "British English"
+msgid "English (British)"
 msgstr ""
 
 #: conf/global_settings.py:62
-msgid "Spanish"
+msgid "English (Canadian)"
 msgstr ""
 
 #: conf/global_settings.py:63
-msgid "Argentinian Spanish"
+msgid "English (Australia)"
 msgstr ""
 
 #: conf/global_settings.py:64
-msgid "Mexican Spanish"
+msgid "English (New Zealand)"
 msgstr ""
 
 #: conf/global_settings.py:65
-msgid "Nicaraguan Spanish"
+msgid "English (India)"
 msgstr ""
 
 #: conf/global_settings.py:66
-msgid "Estonian"
+msgid "Spanish"
 msgstr ""
 
 #: conf/global_settings.py:67
-msgid "Basque"
+msgid "Spanish (Argentinian)"
 msgstr ""
 
 #: conf/global_settings.py:68
-msgid "Persian"
+msgid "Spanish (Mexican)"
 msgstr ""
 
 #: conf/global_settings.py:69
-msgid "Finnish"
+msgid "Spanish (Nicaraguan)"
 msgstr ""
 
 #: conf/global_settings.py:70
-msgid "French"
+msgid "Estonian"
 msgstr ""
 
 #: conf/global_settings.py:71
-msgid "French (Canadian)"
+msgid "Basque"
 msgstr ""
 
 #: conf/global_settings.py:72
-msgid "Frisian"
+msgid "Persian"
 msgstr ""
 
 #: conf/global_settings.py:73
-msgid "Irish"
+msgid "Finnish"
 msgstr ""
 
 #: conf/global_settings.py:74
-msgid "Galician"
+msgid "French"
 msgstr ""
 
 #: conf/global_settings.py:75
-msgid "Hebrew"
+msgid "French (Canadian)"
 msgstr ""
 
 #: conf/global_settings.py:76
-msgid "Hindi"
+msgid "Frisian"
 msgstr ""
 
 #: conf/global_settings.py:77
-msgid "Croatian"
+msgid "Irish"
 msgstr ""
 
 #: conf/global_settings.py:78
-msgid "Haitian Creole"
+msgid "Galician"
 msgstr ""
 
 #: conf/global_settings.py:79
-msgid "Hungarian"
+msgid "Hebrew"
 msgstr ""
 
 #: conf/global_settings.py:80
-msgid "Indonesian"
+msgid "Hindi"
 msgstr ""
 
 #: conf/global_settings.py:81
-msgid "Icelandic"
+msgid "Croatian"
 msgstr ""
 
 #: conf/global_settings.py:82
-msgid "Italian"
+msgid "Haitian Creole"
 msgstr ""
 
 #: conf/global_settings.py:83
-msgid "Inuktitut"
+msgid "Hungarian"
 msgstr ""
 
 #: conf/global_settings.py:84
-msgid "Inuinnaqtun"
+msgid "Indonesian"
 msgstr ""
 
 #: conf/global_settings.py:85
-msgid "Japanese"
+msgid "Icelandic"
 msgstr ""
 
 #: conf/global_settings.py:86
-msgid "Georgian"
+msgid "Italian"
 msgstr ""
 
 #: conf/global_settings.py:87
-msgid "Khmer"
+msgid "Inuktitut"
 msgstr ""
 
 #: conf/global_settings.py:88
-msgid "Kannada"
+msgid "Inuinnaqtun"
 msgstr ""
 
 #: conf/global_settings.py:89
-msgid "Korean"
+msgid "Japanese"
 msgstr ""
 
 #: conf/global_settings.py:90
-msgid "Lithuanian"
+msgid "Georgian"
 msgstr ""
 
 #: conf/global_settings.py:91
-msgid "Latvian"
+msgid "Khmer"
 msgstr ""
 
 #: conf/global_settings.py:92
-msgid "Macedonian"
+msgid "Kannada"
 msgstr ""
 
 #: conf/global_settings.py:93
-msgid "Malay"
+msgid "Korean"
 msgstr ""
 
 #: conf/global_settings.py:94
-msgid "Malayalam"
+msgid "Lithuanian"
 msgstr ""
 
 #: conf/global_settings.py:95
-msgid "Mongolian"
+msgid "Latvian"
 msgstr ""
 
 #: conf/global_settings.py:96
-msgid "Burmese"
+msgid "Macedonian"
 msgstr ""
 
 #: conf/global_settings.py:97
-msgid "Dutch"
+msgid "Malay"
 msgstr ""
 
 #: conf/global_settings.py:98
-msgid "Norwegian"
+msgid "Malayalam"
 msgstr ""
 
 #: conf/global_settings.py:99
-msgid "Norwegian Bokmal"
+msgid "Mongolian"
 msgstr ""
 
 #: conf/global_settings.py:100
-msgid "Norwegian Nynorsk"
+msgid "Burmese"
 msgstr ""
 
 #: conf/global_settings.py:101
-msgid "Punjabi"
+msgid "Dutch"
 msgstr ""
 
 #: conf/global_settings.py:102
-msgid "Polish"
+msgid "Nepali"
 msgstr ""
 
 #: conf/global_settings.py:103
-msgid "Portuguese"
+msgid "Norwegian"
 msgstr ""
 
 #: conf/global_settings.py:104
-msgid "Portuguese (Brazilian)"
+msgid "Norwegian Bokmal"
 msgstr ""
 
 #: conf/global_settings.py:105
-msgid "Romanian"
+msgid "Norwegian Nynorsk"
 msgstr ""
 
 #: conf/global_settings.py:106
-msgid "Russian"
+msgid "Punjabi"
 msgstr ""
 
 #: conf/global_settings.py:107
-msgid "Sinhala (Sri Lanka)"
+msgid "Polish"
 msgstr ""
 
 #: conf/global_settings.py:108
-msgid "Slovak"
+msgid "Portuguese"
 msgstr ""
 
 #: conf/global_settings.py:109
-msgid "Slovenian"
+msgid "Portuguese (Brazilian)"
 msgstr ""
 
 #: conf/global_settings.py:110
-msgid "Sotho (Lesotho)"
+msgid "Romanian"
 msgstr ""
 
 #: conf/global_settings.py:111
-msgid "Albanian"
+msgid "Russian"
 msgstr ""
 
 #: conf/global_settings.py:112
-msgid "Serbian"
+msgid "Sinhala (Sri Lanka)"
 msgstr ""
 
 #: conf/global_settings.py:113
-msgid "Serbian Latin"
+msgid "Slovak"
 msgstr ""
 
 #: conf/global_settings.py:114
-msgid "Swedish"
+msgid "Slovenian"
 msgstr ""
 
 #: conf/global_settings.py:115
-msgid "Tamil"
+msgid "Sotho (Lesotho)"
 msgstr ""
 
 #: conf/global_settings.py:116
-msgid "Telugu"
+msgid "Albanian"
 msgstr ""
 
 #: conf/global_settings.py:117
-msgid "Thai"
+msgid "Serbian"
 msgstr ""
 
 #: conf/global_settings.py:118
-msgid "Tagalog (Filipino)"
+msgid "Serbian Latin"
 msgstr ""
 
 #: conf/global_settings.py:119
-msgid "Turkish"
+msgid "Swedish"
 msgstr ""
 
 #: conf/global_settings.py:120
-msgid "Ukrainian"
+msgid "Tamil"
 msgstr ""
 
 #: conf/global_settings.py:121
-msgid "Urdu"
+msgid "Telugu"
 msgstr ""
 
 #: conf/global_settings.py:122
-msgid "Vietnamese"
+msgid "Thai"
 msgstr ""
 
 #: conf/global_settings.py:123
-msgid "Simplified Chinese"
+msgid "Tigrinya"
 msgstr ""
 
 #: conf/global_settings.py:124
-msgid "Traditional Chinese"
+msgid "Tagalog (Filipino)"
+msgstr ""
+
+#: conf/global_settings.py:125
+msgid "Turkish"
+msgstr ""
+
+#: conf/global_settings.py:126
+msgid "Ukrainian"
+msgstr ""
+
+#: conf/global_settings.py:127
+msgid "Urdu"
+msgstr ""
+
+#: conf/global_settings.py:128
+msgid "Vietnamese"
+msgstr ""
+
+#: conf/global_settings.py:129
+msgid "Chinese (Simplified)"
+msgstr ""
+
+#: conf/global_settings.py:130
+msgid "Chinese (Traditional)"
 msgstr ""
 
 #: core/validators.py:23 forms/fields.py:62
