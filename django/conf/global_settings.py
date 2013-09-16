@@ -126,7 +126,7 @@ LANGUAGES = (
     ('uk', gettext_noop('Ukrainian')),
     ('ur', gettext_noop('Urdu')),
     ('vi', gettext_noop('Vietnamese')),
-    ('zh', gettext_noop('Chinese (Simplified)')),
+    ('zh-cn', gettext_noop('Chinese (Simplified)')),
     ('zh-tw', gettext_noop('Chinese (Traditional)')),
 )
 
