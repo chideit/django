@@ -14,9 +14,12 @@ except ImportError:
 
 # NumPy supported?
 try:
-    import numpy
+    import numpypy as numpy #for pypy support
 except ImportError:
-    numpy = False
+    try:
+        import numpy
+    except ImportError:
+        numpy = False
 
 class GEOSBase(object):
     """
