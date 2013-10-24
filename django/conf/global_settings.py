@@ -128,6 +128,16 @@ LANGUAGES = (
     ('vi', gettext_noop('Vietnamese')),
     ('zh-cn', gettext_noop('Chinese (Simplified)')),
     ('zh-tw', gettext_noop('Chinese (Traditional)')),
+    ('custom-0', gettext_noop('Custom 0')),
+    ('custom-1', gettext_noop('Custom 1')),
+    ('custom-2', gettext_noop('Custom 2')),
+    ('custom-3', gettext_noop('Custom 3')),
+    ('custom-4', gettext_noop('Custom 4')),
+    ('custom-5', gettext_noop('Custom 5')),
+    ('custom-6', gettext_noop('Custom 6')),
+    ('custom-7', gettext_noop('Custom 7')),
+    ('custom-8', gettext_noop('Custom 8')),
+    ('custom-9', gettext_noop('Custom 9')),
 )
 
 # Languages using BiDi (right-to-left) layout
