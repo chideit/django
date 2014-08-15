@@ -1,3 +1,5 @@
+# coding=utf-8
+
 LANG_INFO = {
     'ar': {
         'bidi': True,
@@ -237,7 +239,7 @@ LANG_INFO = {
         'bidi': False,
         'code': 'lt',
         'name': 'Lithuanian',
-        'name_local': u'Lithuanian',
+        'name_local': u'Lietuvių',
     },
     'lv': {
         'bidi': False,
