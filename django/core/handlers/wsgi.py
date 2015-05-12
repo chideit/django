@@ -172,10 +172,11 @@ class WSGIHandler(base.BaseHandler):
                     raise
 
         set_script_prefix(get_script_name(environ))
-        signals.request_started.send(sender=self.__class__)
+
         try:
             request = self.request_class(environ)
         except UnicodeDecodeError:
+            signals.request_started.send(sender=self.__class__)
             logger.warning('Bad Request (UnicodeDecodeError)',
                 exc_info=sys.exc_info(),
                 extra={
@@ -184,6 +185,7 @@ class WSGIHandler(base.BaseHandler):
             )
             response = http.HttpResponseBadRequest()
         else:
+            signals.request_started.send(sender=self.__class__, request=request)
             response = self.get_response(request)
 
         response._handler_class = self.__class__
