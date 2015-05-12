@@ -150,8 +150,14 @@ class BlockTranslateNode(Node):
             else:
                 result = translation.ugettext(singular)
         default_value = settings.TEMPLATE_STRING_IF_INVALID
-        render_value = lambda v: render_value_in_context(
-            context.get(v, default_value), context)
+
+        def render_value(key):
+            if key in context:
+                val = context[key]
+            else:
+                val = default_value % key if '%s' in default_value else default_value
+            return render_value_in_context(val, context)
+
         data = dict((v, render_value(v)) for v in vars)
         context.pop()
         try:
@@ -346,7 +352,7 @@ def do_translate(parser, token):
         def top(self):
             value = self.value()
 
-            # Backwards Compatiblity fix:
+            # Backwards Compatibility fix:
             # FilterExpression does not support single-quoted strings,
             # so we make a cheap localized fix in order to maintain
             # backwards compatibility with existing uses of ``trans``

@@ -4,9 +4,11 @@ from __future__ import unicode_literals
 from datetime import datetime
 import os
 from unittest import TestCase
+import warnings
 
 from django.utils import html, safestring
 from django.utils._os import upath
+from django.utils.deprecation import RemovedInDjango18Warning
 from django.utils.encoding import force_text
 
 
@@ -80,9 +82,20 @@ class TestUtilsHtml(TestCase):
             ('a<p a >b</p>c', 'abc'),
             ('d<a:b c:d>e</p>f', 'def'),
             ('<strong>foo</strong><a href="http://example.com">bar</a>', 'foobar'),
+            # caused infinite loop on Pythons not patched with
+            # http://bugs.python.org/issue20288
+            ('&gotcha&#;<>', '&gotcha&#;<>'),
         )
         for value, output in items:
             self.check_output(f, value, output)
+
+        # Some convoluted syntax for which parsing may differ between python versions
+        output = html.strip_tags('<sc<!-- -->ript>test<<!-- -->/script>')
+        self.assertNotIn('<script>', output)
+        self.assertIn('test', output)
+        output = html.strip_tags('<script>alert()</script>&h')
+        self.assertNotIn('<script>', output)
+        self.assertIn('alert()', output)
 
         # Test with more lengthy content (also catching performance regressions)
         for filename in ('strip_tags1.html', 'strip_tags2.txt'):
@@ -130,25 +143,29 @@ class TestUtilsHtml(TestCase):
                 self.check_output(f, in_pattern % {'entity': entity}, output)
 
     def test_fix_ampersands(self):
-        f = html.fix_ampersands
-        # Strings without ampersands or with ampersands already encoded.
-        values = ("a&#1;", "b", "&a;", "&amp; &x; ", "asdf")
-        patterns = (
-            ("%s", "%s"),
-            ("&%s", "&amp;%s"),
-            ("&%s&", "&amp;%s&amp;"),
-        )
-        for value in values:
-            for in_pattern, out_pattern in patterns:
-                self.check_output(f, in_pattern % value, out_pattern % value)
-        # Strings with ampersands that need encoding.
-        items = (
-            ("&#;", "&amp;#;"),
-            ("&#875 ;", "&amp;#875 ;"),
-            ("&#4abc;", "&amp;#4abc;"),
-        )
-        for value, output in items:
-            self.check_output(f, value, output)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RemovedInDjango18Warning)
+            f = html.fix_ampersands
+            # Strings without ampersands or with ampersands already encoded.
+            values = ("a&#1;", "b", "&a;", "&amp; &x; ", "asdf")
+            patterns = (
+                ("%s", "%s"),
+                ("&%s", "&amp;%s"),
+                ("&%s&", "&amp;%s&amp;"),
+            )
+
+            for value in values:
+                for in_pattern, out_pattern in patterns:
+                    self.check_output(f, in_pattern % value, out_pattern % value)
+
+            # Strings with ampersands that need encoding.
+            items = (
+                ("&#;", "&amp;#;"),
+                ("&#875 ;", "&amp;#875 ;"),
+                ("&#4abc;", "&amp;#4abc;"),
+            )
+            for value, output in items:
+                self.check_output(f, value, output)
 
     def test_escapejs(self):
         f = html.escapejs
@@ -171,8 +188,10 @@ class TestUtilsHtml(TestCase):
             # also a regression test for #7267: this used to raise an UnicodeDecodeError
             ('<p>* foo</p><p>* bar</p>', '<ul>\n<li> foo</li><li> bar</li>\n</ul>'),
         )
-        for value, output in items:
-            self.check_output(f, value, output)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RemovedInDjango18Warning)
+            for value, output in items:
+                self.check_output(f, value, output)
 
     def test_remove_tags(self):
         f = html.remove_tags

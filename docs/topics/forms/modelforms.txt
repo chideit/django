@@ -49,67 +49,72 @@ Each model field has a corresponding default form field. For example, a
 ``ManyToManyField`` is represented as a ``MultipleChoiceField``. Here is the
 full list of conversions:
 
-===============================  ========================================
-Model field                      Form field
-===============================  ========================================
-``AutoField``                    Not represented in the form
+.. currentmodule:: django.db.models
 
-``BigIntegerField``              ``IntegerField`` with ``min_value`` set
-                                 to -9223372036854775808 and ``max_value``
-                                 set to 9223372036854775807.
+=================================== ==================================================
+Model field                         Form field
+=================================== ==================================================
+:class:`AutoField`                  Not represented in the form
 
-``BooleanField``                 ``BooleanField``
+:class:`BigIntegerField`            :class:`~django.forms.IntegerField` with
+                                    ``min_value`` set to -9223372036854775808
+                                    and ``max_value`` set to 9223372036854775807.
 
-``CharField``                    ``CharField`` with ``max_length`` set to
-                                 the model field's ``max_length``
+:class:`BooleanField`               :class:`~django.forms.BooleanField`
 
-``CommaSeparatedIntegerField``   ``CharField``
+:class:`CharField`                  :class:`~django.forms.CharField` with
+                                    ``max_length`` set to the model field's
+                                    ``max_length``
 
-``DateField``                    ``DateField``
+:class:`CommaSeparatedIntegerField` :class:`~django.forms.CharField`
 
-``DateTimeField``                ``DateTimeField``
+:class:`DateField`                  :class:`~django.forms.DateField`
 
-``DecimalField``                 ``DecimalField``
+:class:`DateTimeField`              :class:`~django.forms.DateTimeField`
 
-``EmailField``                   ``EmailField``
+:class:`DecimalField`               :class:`~django.forms.DecimalField`
 
-``FileField``                    ``FileField``
+:class:`EmailField`                 :class:`~django.forms.EmailField`
 
-``FilePathField``                ``FilePathField``
+:class:`FileField`                  :class:`~django.forms.FileField`
 
-``FloatField``                   ``FloatField``
+:class:`FilePathField`              :class:`~django.forms.FilePathField`
 
-``ForeignKey``                   ``ModelChoiceField`` (see below)
+:class:`FloatField`                 :class:`~django.forms.FloatField`
 
-``ImageField``                   ``ImageField``
+:class:`ForeignKey`                 :class:`~django.forms.ModelChoiceField`
+                                    (see below)
 
-``IntegerField``                 ``IntegerField``
+``ImageField``                      :class:`~django.forms.ImageField`
 
-``IPAddressField``               ``IPAddressField``
+:class:`IntegerField`               :class:`~django.forms.IntegerField`
 
-``GenericIPAddressField``        ``GenericIPAddressField``
+``IPAddressField``                  ``IPAddressField``
 
-``ManyToManyField``              ``ModelMultipleChoiceField`` (see
-                                 below)
+:class:`GenericIPAddressField`      :class:`~django.forms.GenericIPAddressField`
 
-``NullBooleanField``             ``CharField``
+:class:`ManyToManyField`            :class:`~django.forms.ModelMultipleChoiceField`
+                                    (see below)
 
-``PositiveIntegerField``         ``IntegerField``
+:class:`NullBooleanField`           :class:`~django.forms.NullBooleanField`
 
-``PositiveSmallIntegerField``    ``IntegerField``
+:class:`PositiveIntegerField`       :class:`~django.forms.IntegerField`
 
-``SlugField``                    ``SlugField``
+:class:`PositiveSmallIntegerField`  :class:`~django.forms.IntegerField`
 
-``SmallIntegerField``            ``IntegerField``
+:class:`SlugField`                  :class:`~django.forms.SlugField`
 
-``TextField``                    ``CharField`` with
-                                 ``widget=forms.Textarea``
+:class:`SmallIntegerField`          :class:`~django.forms.IntegerField`
 
-``TimeField``                    ``TimeField``
+:class:`TextField`                  :class:`~django.forms.CharField` with
+                                    ``widget=forms.Textarea``
 
-``URLField``                     ``URLField``
-===============================  ========================================
+:class:`TimeField`                  :class:`~django.forms.TimeField`
 
+:class:`URLField`                   :class:`~django.forms.URLField`
+=================================== ==================================================
+
+.. currentmodule:: django.forms
 
 As you might expect, the ``ForeignKey`` and ``ManyToManyField`` model field
 types are special cases:
@@ -162,8 +167,7 @@ Consider this set of models::
         title = models.CharField(max_length=3, choices=TITLE_CHOICES)
         birth_date = models.DateField(blank=True, null=True)
 
-        # On Python 3: def __str__(self):
-        def __unicode__(self):
+        def __str__(self):              # __unicode__ on Python 2
             return self.name
 
     class Book(models.Model):
@@ -233,7 +237,7 @@ Overriding the clean() method
 You can override the ``clean()`` method on a model form to provide additional
 validation in the same way you can on a normal form.
 
-A model form instance bound to a model object will contain an ``instance``
+A model form instance attached to a model object will contain an ``instance``
 attribute that gives its methods access to that specific model instance.
 
 .. warning::
@@ -259,7 +263,9 @@ The model's ``clean()`` method will be called before any uniqueness checks are
 made. See :ref:`Validating objects <validating-objects>` for more information
 on the model's ``clean()`` hook.
 
-Considerations regarding fields' ``error_messages``
+.. _considerations-regarding-model-errormessages:
+
+Considerations regarding model's ``error_messages``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Error messages defined at the
@@ -267,11 +273,29 @@ Error messages defined at the
 :ref:`form Meta <modelforms-overriding-default-fields>` level always take
 precedence over the error messages defined at the
 :attr:`model field <django.db.models.Field.error_messages>` level.
+
 Error messages  defined on :attr:`model fields
 <django.db.models.Field.error_messages>` are only used when the
 ``ValidationError`` is raised during the :ref:`model validation
 <validating-objects>` step and no corresponding error messages are defined at
 the form level.
+
+.. versionadded:: 1.7
+
+You can override the error messages from ``NON_FIELD_ERRORS`` raised by model
+validation by adding the :data:`~django.core.exceptions.NON_FIELD_ERRORS` key
+to the ``error_messages`` dictionary of the ``ModelForm``’s inner ``Meta`` class::
+
+    from django.forms import ModelForm
+    from django.core.exceptions import NON_FIELD_ERRORS
+
+    class ArticleForm(ModelForm):
+        class Meta:
+            error_messages = {
+                NON_FIELD_ERRORS: {
+                    'unique_together': "%(model_name)s's %(field_labels)s are not unique.",
+                }
+            }
 
 The ``save()`` method
 ---------------------
@@ -468,10 +492,9 @@ To specify a custom widget for a field, use the ``widgets`` attribute of the
 inner ``Meta`` class. This should be a dictionary mapping field names to widget
 classes or instances.
 
-For example, if you want the a ``CharField`` for the ``name``
-attribute of ``Author`` to be represented by a ``<textarea>`` instead
-of its default ``<input type="text">``, you can override the field's
-widget::
+For example, if you want the ``CharField`` for the ``name`` attribute of
+``Author`` to be represented by a ``<textarea>`` instead of its default
+``<input type="text">``, you can override the field's widget::
 
     from django.forms import ModelForm, Textarea
     from myapp.models import Author
@@ -496,6 +519,8 @@ attributes of the inner ``Meta`` class if you want to further customize a field.
 
 For example if you wanted to customize the wording of all user facing strings for
 the ``name`` field::
+
+    from django.utils.translation import ugettext_lazy as _
 
     class AuthorForm(ModelForm):
         class Meta:
@@ -528,13 +553,13 @@ field, you could do the following::
 
         class Meta:
             model = Article
-            fields = ['pub_date', 'headline', 'content', 'reporter']
+            fields = ['pub_date', 'headline', 'content', 'reporter', 'slug']
 
 
 If you want to specify a field's validators, you can do so by defining
 the field declaratively and setting its ``validators`` parameter::
 
-    from django.forms import ModelForm, DateField
+    from django.forms import ModelForm, CharField
     from myapp.models import Article
 
     class ArticleForm(ModelForm):
@@ -646,22 +671,35 @@ There are a couple of things to note, however.
 
 .. versionchanged:: 1.7
 
-* It's possible to inherit from both ``Form`` and ``ModelForm`` simultaneuosly,
+* It's possible to inherit from both ``Form`` and ``ModelForm`` simultaneously,
   however, you must ensure that ``ModelForm`` appears first in the MRO. This is
   because these classes rely on different metaclasses and a class can only have
   one metaclass.
 
 .. versionadded:: 1.7
 
-* It's possible to opt-out from a ``Field`` inherited from a parent class by
-  shadowing it. While any non-``Field`` value works for this purpose, it's
-  recommended to use ``None`` to make it explicit that a field is being
-  nullified.
+* It's possible to declaratively remove a ``Field`` inherited from a parent class by
+  setting the name to be ``None`` on the subclass.
 
   You can only use this technique to opt out from a field defined declaratively
   by a parent class; it won't prevent the ``ModelForm`` metaclass from generating
   a default field. To opt-out from default fields, see
   :ref:`controlling-fields-with-fields-and-exclude`.
+
+Providing initial values
+------------------------
+
+As with regular forms, it's possible to specify initial data for forms by
+specifying an ``initial`` parameter when instantiating the form. Initial
+values provided this way will override both initial values from the form field
+and values from an attached model instance. For example::
+
+    >>> article = Article.objects.get(pk=1)
+    >>> article.headline
+    'My headline'
+    >>> form = ArticleForm(initial={'headline': 'Initial headline'}, instance=article)
+    >>> form['headline'].value()
+    'Initial headline'
 
 .. _modelforms-factory:
 
@@ -760,6 +798,30 @@ instances of the model, you can specify an empty QuerySet::
 
    >>> AuthorFormSet(queryset=Author.objects.none())
 
+Changing the ``form``
+---------------------
+
+By default, when you use ``modelformset_factory``, a model form will
+be created using :func:`~django.forms.models.modelform_factory`.
+Often, it can be useful to specify a custom model form. For example,
+you can create a custom model form that has custom validation::
+
+    class AuthorForm(forms.ModelForm):
+        class Meta:
+            model = Author
+            fields = ('name', 'title')
+
+        def clean_name(self):
+            # custom validation for the name field
+            ...
+
+Then, pass your model form to the factory function::
+
+    AuthorFormSet = modelformset_factory(Author, form=AuthorForm)
+
+It is not always necessary to define a custom model form. The
+``modelformset_factory`` function has several arguments which are
+passed through to ``modelform_factory``, which are described below.
 
 .. _controlling-fields-with-fields-and-exclude:
 
@@ -811,8 +873,9 @@ As with regular formsets, it's possible to :ref:`specify initial data
 <formsets-initial-data>` for forms in the formset by specifying an ``initial``
 parameter when instantiating the model formset class returned by
 :func:`~django.forms.models.modelformset_factory`. However, with model
-formsets, the initial values only apply to extra forms, those that aren't bound
-to an existing object instance.
+formsets, the initial values only apply to extra forms, those that aren't
+attached to an existing model instance. If the extra forms with initial data
+aren't changed by the user, they won't be validated or saved.
 
 .. _saving-objects-in-the-formset:
 
@@ -942,6 +1005,24 @@ class's ``clean`` method::
             for form in self.forms:
                 # your custom formset validation
                 ...
+
+Also note that by the time you reach this step, individual model instances
+have already been created for each ``Form``. Modifying a value in
+``form.cleaned_data`` is not sufficient to affect the saved value. If you wish
+to modify a value in ``ModelFormSet.clean()`` you must modify
+``form.instance``::
+
+    from django.forms.models import BaseModelFormSet
+
+    class MyModelFormSet(BaseModelFormSet):
+        def clean(self):
+            super(MyModelFormSet, self).clean()
+
+            for form in self.forms:
+                name = form.cleaned_data['name'].upper()
+                form.cleaned_data['name'] = name
+                # update the instance value.
+                form.instance.name = name
 
 Using a custom queryset
 -----------------------

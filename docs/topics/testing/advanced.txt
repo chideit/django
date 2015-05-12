@@ -37,8 +37,10 @@ Example
 
 The following is a simple unit test using the request factory::
 
-    from django.contrib.auth.models import User
+    from django.contrib.auth.models import AnonymousUser, User
     from django.test import TestCase, RequestFactory
+
+    from .views import my_view
 
     class SimpleTest(TestCase):
         def setUp(self):
@@ -51,9 +53,13 @@ The following is a simple unit test using the request factory::
             # Create an instance of a GET request.
             request = self.factory.get('/customer/details')
 
-            # Recall that middleware are not suported. You can simulate a
+            # Recall that middleware are not supported. You can simulate a
             # logged-in user by setting request.user manually.
             request.user = self.user
+
+            # Or you can simulate an anonymous user by setting request.user to
+            # an AnonymousUser instance.
+            request.user = AnonymousUser()
 
             # Test my_view() as if it were deployed at /customer/details
             response = my_view(request)
@@ -231,25 +237,76 @@ Advanced features of ``TransactionTestCase``
     Using ``reset_sequences = True`` will slow down the test, since the primary
     key reset is an relatively expensive database operation.
 
-Running tests outside the test runner
-=====================================
 
-If you want to run tests outside of ``./manage.py test`` -- for example,
-from a shell prompt -- you will need to set up the test
-environment first. Django provides a convenience method to do this::
+Using the Django test runner to test reusable applications
+==========================================================
 
-    >>> from django.test.utils import setup_test_environment
-    >>> setup_test_environment()
+If you are writing a :doc:`reusable application </intro/reusable-apps>`
+you may want to use the Django test runner to run your own test suite
+and thus benefit from the Django testing infrastructure.
 
-:func:`~django.test.utils.setup_test_environment` puts several Django features
-into modes that allow for repeatable testing, but does not create the test
-databases; :func:`django.test.runner.DiscoverRunner.setup_databases`
-takes care of that.
+A common practice is a *tests* directory next to the application code, with the
+following structure::
 
-The call to :func:`~django.test.utils.setup_test_environment` is made
-automatically as part of the setup of ``./manage.py test``. You only
-need to manually invoke this method if you're not using running your
-tests via Django's test runner.
+    runtests.py
+    polls/
+        __init__.py
+        models.py
+        ...
+    tests/
+        __init__.py
+        models.py
+        test_settings.py
+        tests.py
+
+Let's take a look inside a couple of those files:
+
+.. snippet::
+    :filename: runtests.py
+
+    #!/usr/bin/env python
+    import os
+    import sys
+
+    import django
+    from django.conf import settings
+    from django.test.utils import get_runner
+
+    if __name__ == "__main__":
+        os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_settings'
+        django.setup()
+        TestRunner = get_runner(settings)
+        test_runner = TestRunner()
+        failures = test_runner.run_tests(["tests"])
+        sys.exit(bool(failures))
+
+
+This is the script that you invoke to run the test suite. It sets up the
+Django environment, creates the test database and runs the tests.
+
+For the sake of clarity, this example contains only the bare minimum
+necessary to use the Django test runner. You may want to add
+command-line options for controlling verbosity, passing in specific test
+labels to run, etc.
+
+.. snippet::
+    :filename: tests/test_settings.py
+
+    SECRET_KEY = 'fake-key'
+    INSTALLED_APPS = [
+        "tests",
+    ]
+
+This file contains the :doc:`Django settings </topics/settings>`
+required to run your app's tests.
+
+Again, this is a minimal example; your tests may require additional
+settings to run.
+
+Since the *tests* package is included in :setting:`INSTALLED_APPS` when
+running your tests, you can define test-only models in its ``models.py``
+file.
+
 
 .. _other-testing-frameworks:
 
@@ -354,7 +411,7 @@ Attributes
     the individual tests and format the results. By default it is set to
     ``unittest.TextTestRunner``. Despite the unfortunate similarity in
     naming conventions, this is not the same type of class as
-    ``DiscoverRunner``, which covers a broader set of responsibilites. You
+    ``DiscoverRunner``, which covers a broader set of responsibilities. You
     can override this attribute to modify the way tests are run and reported.
 
 .. attribute:: DiscoverRunner.test_loader
@@ -377,21 +434,9 @@ Methods
 
     Run the test suite.
 
-    ``test_labels`` is a list of strings describing the tests to be run. A test
-    label can take one of four forms:
-
-    * ``path.to.test_module.TestCase.test_method`` -- Run a single test method
-      in a test case.
-    * ``path.to.test_module.TestCase`` -- Run all the test methods in a test
-      case.
-    * ``path.to.module`` -- Search for and run all tests in the named Python
-      package or module.
-    * ``path/to/directory`` -- Search for and run all tests below the named
-      directory.
-
-    If ``test_labels`` has a value of ``None``, the test runner will search for
-    tests in all files below the current directory whose names match its
-    ``pattern`` (see above).
+    ``test_labels`` allows you to specify which tests to run and supports
+    several formats (see :meth:`DiscoverRunner.build_suite` for a list of
+    supported formats).
 
     ``extra_tests`` is a list of extra ``TestCase`` instances to add to the
     suite that is executed by the test runner. These extra tests are run
@@ -410,15 +455,20 @@ Methods
     Constructs a test suite that matches the test labels provided.
 
     ``test_labels`` is a list of strings describing the tests to be run. A test
-    label can take one of three forms:
+    label can take one of four forms:
 
-    * ``app.TestCase.test_method`` -- Run a single test method in a test
+    * ``path.to.test_module.TestCase.test_method`` -- Run a single test method
+      in a test case.
+    * ``path.to.test_module.TestCase`` -- Run all the test methods in a test
       case.
-    * ``app.TestCase`` -- Run all the test methods in a test case.
-    * ``app`` -- Search for and run all tests in the named application.
+    * ``path.to.module`` -- Search for and run all tests in the named Python
+      package or module.
+    * ``path/to/directory`` -- Search for and run all tests below the named
+      directory.
 
-    If ``test_labels`` has a value of ``None``, the test runner should run
-    search for tests in all the applications in :setting:`INSTALLED_APPS`.
+    If ``test_labels`` has a value of ``None``, the test runner will search for
+    tests in all files below the current directory whose names match its
+    ``pattern`` (see above).
 
     ``extra_tests`` is a list of extra ``TestCase`` instances to add to the
     suite that is executed by the test runner. These extra tests are run
@@ -490,7 +540,7 @@ django.db.connection.creation
 The creation module of the database backend also provides some utilities that
 can be useful during testing.
 
-.. function:: create_test_db([verbosity=1, autoclobber=False])
+.. function:: create_test_db([verbosity=1, autoclobber=False, serialize=True])
 
     Creates a new test database and runs ``migrate`` against it.
 
@@ -506,11 +556,27 @@ can be useful during testing.
     * If autoclobber is ``True``, the database will be destroyed
       without consulting the user.
 
+    ``serialize`` determines if Django serializes the database into an
+    in-memory JSON string before running tests (used to restore the database
+    state between tests if you don't have transactions). You can set this to
+    ``False`` to speed up creation time if you don't have any test classes
+    with :ref:`serialized_rollback=True <test-case-serialized-rollback>`.
+
+    .. versionadded:: 1.7.1
+
+        If you are using the default test runner, you can control this with the
+        the :setting:`SERIALIZE <TEST_SERIALIZE>` entry in the
+        :setting:`TEST <DATABASE-TEST>` dictionary
+
     Returns the name of the test database that it created.
 
     ``create_test_db()`` has the side effect of modifying the value of
     :setting:`NAME` in :setting:`DATABASES` to match the name of the test
     database.
+
+    .. versionchanged:: 1.7
+
+        The ``serialize`` argument was added.
 
 .. function:: destroy_test_db(old_database_name, [verbosity=1])
 
@@ -549,4 +615,4 @@ For more options like annotated HTML listings detailing missed lines, see the
 `coverage.py`_ docs.
 
 .. _coverage.py: http://nedbatchelder.com/code/coverage/
-.. _install coverage.py: http://pypi.python.org/pypi/coverage
+.. _install coverage.py: https://pypi.python.org/pypi/coverage

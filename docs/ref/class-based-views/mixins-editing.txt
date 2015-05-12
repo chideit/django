@@ -12,7 +12,7 @@ The following mixins are used to construct Django's editing views:
 .. note::
 
     Examples of how these are combined into editing views can be found at
-    the documentation on ``Generic editing views``.
+    the documentation on :doc:`/ref/class-based-views/generic-editing`.
 
 FormMixin
 ---------
@@ -20,6 +20,10 @@ FormMixin
 .. class:: django.views.generic.edit.FormMixin
 
     A mixin class that provides facilities for creating and displaying forms.
+
+    **Mixins**
+
+    * :class:`django.views.generic.base.ContextMixin`
 
     **Methods and Attributes**
 
@@ -86,20 +90,6 @@ FormMixin
 
         Renders a response, providing the invalid form as context.
 
-    .. method:: get_context_data(**kwargs)
-
-        Populates a context containing the contents of ``kwargs``.
-
-    **Context**
-
-    * ``form``: The form instance that was generated for the view.
-
-    .. note::
-
-        Views mixing ``FormMixin`` must provide an implementation of
-        :meth:`form_valid` and :meth:`form_invalid`.
-
-
 ModelFormMixin
 --------------
 
@@ -112,9 +102,7 @@ ModelFormMixin
     mixin have access to the
     :attr:`~django.views.generic.detail.SingleObjectMixin.model` and
     :attr:`~django.views.generic.detail.SingleObjectMixin.queryset` attributes,
-    describing the type of object that the ``ModelForm`` is manipulating. The
-    view also provides ``self.object``, the instance being manipulated. If the
-    instance is being created, ``self.object`` will be ``None``.
+    describing the type of object that the ``ModelForm`` is manipulating.
 
     **Mixins**
 
@@ -217,6 +205,10 @@ ProcessFormView
 
         The ``PUT`` action is also handled and just passes all parameters
         through to :meth:`post`.
+
+
+DeletionMixin
+-------------
 
 .. class:: django.views.generic.edit.DeletionMixin
 

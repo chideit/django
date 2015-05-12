@@ -1,9 +1,15 @@
 from __future__ import unicode_literals
 
 import sys
+try:
+    import threading
+except ImportError:
+    threading = None
+import time
 from unittest import skipIf, skipUnless
 
-from django.db import connection, transaction, DatabaseError, IntegrityError
+from django.db import (connection, transaction,
+    DatabaseError, Error, IntegrityError, OperationalError)
 from django.test import TransactionTestCase, skipIfDBFeature, skipUnlessDBFeature
 from django.test.utils import IgnoreDeprecationWarningsMixin
 from django.utils import six
@@ -202,8 +208,9 @@ class AtomicTests(TransactionTestCase):
             # trigger a database error inside an inner atomic without savepoint
             with self.assertRaises(DatabaseError):
                 with transaction.atomic(savepoint=False):
-                    connection.cursor().execute(
-                        "SELECT no_such_col FROM transactions_reporter")
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT no_such_col FROM transactions_reporter")
             # prevent atomic from rolling back since we're recovering manually
             self.assertTrue(transaction.get_rollback())
             transaction.set_rollback(False)
@@ -352,6 +359,59 @@ class AtomicErrorsTests(TransactionTestCase):
             transaction.set_rollback(False)
             r2.save(force_update=True)
         self.assertEqual(Reporter.objects.get(pk=r1.pk).last_name, "Calculus")
+
+    @skipUnlessDBFeature('test_db_allows_multiple_connections')
+    def test_atomic_prevents_queries_in_broken_transaction_after_client_close(self):
+        with transaction.atomic():
+            Reporter.objects.create(first_name="Archibald", last_name="Haddock")
+            connection.close()
+            # The connection is closed and the transaction is marked as
+            # needing rollback. This will raise an InterfaceError on databases
+            # that refuse to create cursors on closed connections (PostgreSQL)
+            # and a TransactionManagementError on other databases.
+            with self.assertRaises(Error):
+                Reporter.objects.create(first_name="Cuthbert", last_name="Calculus")
+        # The connection is usable again .
+        self.assertEqual(Reporter.objects.count(), 0)
+
+
+@skipUnless(connection.vendor == 'mysql', "MySQL-specific behaviors")
+class AtomicMySQLTests(TransactionTestCase):
+
+    available_apps = ['transactions']
+
+    @skipIf(threading is None, "Test requires threading")
+    def test_implicit_savepoint_rollback(self):
+        """MySQL implicitly rolls back savepoints when it deadlocks (#22291)."""
+
+        other_thread_ready = threading.Event()
+
+        def other_thread():
+            try:
+                with transaction.atomic():
+                    Reporter.objects.create(id=1, first_name="Tintin")
+                    other_thread_ready.set()
+                    # We cannot synchronize the two threads with an event here
+                    # because the main thread locks. Sleep for a little while.
+                    time.sleep(1)
+                    # 2) ... and this line deadlocks. (see below for 1)
+                    Reporter.objects.exclude(id=1).update(id=2)
+            finally:
+                # This is the thread-local connection, not the main connection.
+                connection.close()
+
+        other_thread = threading.Thread(target=other_thread)
+        other_thread.start()
+        other_thread_ready.wait()
+
+        with six.assertRaisesRegex(self, OperationalError, 'Deadlock found'):
+            # Double atomic to enter a transaction and create a savepoint.
+            with transaction.atomic():
+                with transaction.atomic():
+                    # 1) This line locks... (see above for 2)
+                    Reporter.objects.create(id=1, first_name="Tintin")
+
+        other_thread.join()
 
 
 class AtomicMiscTests(TransactionTestCase):
@@ -534,8 +594,8 @@ class TransactionRollbackTests(IgnoreDeprecationWarningsMixin, TransactionTestCa
     available_apps = ['transactions']
 
     def execute_bad_sql(self):
-        cursor = connection.cursor()
-        cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
 
     @skipUnlessDBFeature('requires_rollback_on_dirty_transaction')
     def test_bad_sql(self):
@@ -678,6 +738,6 @@ class TransactionContextManagerTests(IgnoreDeprecationWarningsMixin, Transaction
         """
         with self.assertRaises(IntegrityError):
             with transaction.commit_on_success():
-                cursor = connection.cursor()
-                cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
+                with connection.cursor() as cursor:
+                    cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
         transaction.rollback()

@@ -2,20 +2,23 @@
 from __future__ import unicode_literals
 
 import copy
+import json
 import os
 import pickle
 import unittest
 import warnings
 
 from django.core.exceptions import SuspiciousOperation
+from django.core.serializers.json import DjangoJSONEncoder
 from django.core.signals import request_finished
 from django.db import close_old_connections
 from django.http import (QueryDict, HttpResponse, HttpResponseRedirect,
                          HttpResponsePermanentRedirect, HttpResponseNotAllowed,
                          HttpResponseNotModified, StreamingHttpResponse,
-                         SimpleCookie, BadHeaderError,
+                         SimpleCookie, BadHeaderError, JsonResponse,
                          parse_cookie)
 from django.test import TestCase
+from django.utils.deprecation import RemovedInDjango18Warning
 from django.utils.encoding import smart_str, force_text
 from django.utils.functional import lazy
 from django.utils._os import upath
@@ -199,14 +202,14 @@ class QueryDictTests(unittest.TestCase):
         def test_invalid_input_encoding(self):
             """
             QueryDicts must be able to handle invalid input encoding (in this
-            case, bad UTF-8 encoding).
+            case, bad UTF-8 encoding), falling back to ISO-8859-1 decoding.
 
             This test doesn't apply under Python 3 because the URL is a string
             and not a bytestring.
             """
             q = QueryDict(str(b'foo=bar&foo=\xff'))
-            self.assertEqual(q['foo'], '\ufffd')
-            self.assertEqual(q.getlist('foo'), ['bar', '\ufffd'])
+            self.assertEqual(q['foo'], '\xff')
+            self.assertEqual(q.getlist('foo'), ['bar', '\xff'])
 
     def test_pickle(self):
         q = QueryDict(str(''))
@@ -356,10 +359,10 @@ class HttpResponseTests(unittest.TestCase):
         r = HttpResponse(iter(['hello', 'world']))
         self.assertEqual(r.content, r.content)
         self.assertEqual(r.content, b'helloworld')
-        # accessing the iterator works (once) after accessing .content
+        # __iter__ can safely be called multiple times (#20187).
         self.assertEqual(b''.join(r), b'helloworld')
-        self.assertEqual(b''.join(r), b'')
-        # accessing .content still works
+        self.assertEqual(b''.join(r), b'helloworld')
+        # Accessing .content still works.
         self.assertEqual(r.content, b'helloworld')
 
         # Accessing .content also works if the response was iterated first.
@@ -451,6 +454,35 @@ class HttpResponseSubclassesTests(TestCase):
         self.assertContains(response, 'Only the GET method is allowed', status_code=405)
 
 
+class JsonResponseTests(TestCase):
+    def test_json_response_non_ascii(self):
+        data = {'key': 'łóżko'}
+        response = JsonResponse(data)
+        self.assertEqual(json.loads(response.content.decode()), data)
+
+    def test_json_response_raises_type_error_with_default_setting(self):
+        with self.assertRaisesMessage(TypeError,
+                'In order to allow non-dict objects to be serialized set the '
+                'safe parameter to False'):
+            JsonResponse([1, 2, 3])
+
+    def test_json_response_text(self):
+        response = JsonResponse('foobar', safe=False)
+        self.assertEqual(json.loads(response.content.decode()), 'foobar')
+
+    def test_json_response_list(self):
+        response = JsonResponse(['foo', 'bar'], safe=False)
+        self.assertEqual(json.loads(response.content.decode()), ['foo', 'bar'])
+
+    def test_json_response_custom_encoder(self):
+        class CustomDjangoJSONEncoder(DjangoJSONEncoder):
+            def encode(self, o):
+                return json.dumps({'foo': 'bar'})
+
+        response = JsonResponse({}, encoder=CustomDjangoJSONEncoder)
+        self.assertEqual(json.loads(response.content.decode()), {'foo': 'bar'})
+
+
 class StreamingHttpResponseTests(TestCase):
     def test_streaming_response(self):
         r = StreamingHttpResponse(iter(['hello', 'world']))
@@ -530,7 +562,7 @@ class FileCloseTests(TestCase):
         r = HttpResponse(file1)
         self.assertFalse(file1.closed)
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
+            warnings.simplefilter("ignore", RemovedInDjango18Warning)
             list(r)
         self.assertFalse(file1.closed)
         r.close()

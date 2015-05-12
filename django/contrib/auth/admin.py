@@ -2,6 +2,7 @@ from django.db import transaction
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.options import IS_POPUP_VAR
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import (UserCreationForm, UserChangeForm,
     AdminPasswordChangeForm)
 from django.contrib.auth.models import User, Group
@@ -48,8 +49,8 @@ class UserAdmin(admin.ModelAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'password1', 'password2')}
-        ),
+            'fields': ('username', 'password1', 'password2'),
+        }),
     )
     form = UserChangeForm
     add_form = UserCreationForm
@@ -129,9 +130,10 @@ class UserAdmin(admin.ModelAdmin):
             if form.is_valid():
                 form.save()
                 change_message = self.construct_change_message(request, form, None)
-                self.log_change(request, request.user, change_message)
+                self.log_change(request, user, change_message)
                 msg = ugettext('Password changed successfully.')
                 messages.success(request, msg)
+                update_session_auth_hash(request, form.user)
                 return HttpResponseRedirect('..')
         else:
             form = self.change_password_form(user)
@@ -156,6 +158,7 @@ class UserAdmin(admin.ModelAdmin):
             'save_as': False,
             'show_save': True,
         }
+        context.update(admin.site.each_context())
         return TemplateResponse(request,
             self.change_user_password_template or
             'admin/auth/user/change_password.html',

@@ -13,11 +13,12 @@ from django.core.exceptions import SuspiciousOperation
 from django.core.handlers.wsgi import WSGIRequest, LimitedStream
 from django.http import (HttpRequest, HttpResponse, parse_cookie,
     build_request_repr, UnreadablePostError, RawPostDataException)
-from django.test import SimpleTestCase, TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from django.test.client import FakePayload
-from django.test.utils import override_settings, str_prefix
+from django.test.utils import str_prefix
 from django.utils import six
 from django.utils.http import cookie_date, urlencode
+from django.utils.six.moves import http_cookies
 from django.utils.six.moves.urllib.parse import urlencode as original_urlencode
 from django.utils.timezone import utc
 
@@ -186,7 +187,7 @@ class RequestsTests(SimpleTestCase):
         example_cookie = response.cookies['example']
         # A compat cookie may be in use -- check that it has worked
         # both as an output string, and using the cookie attributes
-        self.assertTrue('; httponly' in str(example_cookie))
+        self.assertIn('; %s' % http_cookies.Morsel._reserved['httponly'], str(example_cookie))
         self.assertTrue(example_cookie['httponly'])
 
     def test_limited_stream(self):
@@ -649,8 +650,8 @@ class HostValidationTests(SimpleTestCase):
     def test_get_host_suggestion_of_allowed_host(self):
         """get_host() makes helpful suggestions if a valid-looking host is not in ALLOWED_HOSTS."""
         msg_invalid_host = "Invalid HTTP_HOST header: %r."
-        msg_suggestion = msg_invalid_host + "You may need to add %r to ALLOWED_HOSTS."
-        msg_suggestion2 = msg_invalid_host + "The domain name provided is not valid according to RFC 1034/1035"
+        msg_suggestion = msg_invalid_host + " You may need to add %r to ALLOWED_HOSTS."
+        msg_suggestion2 = msg_invalid_host + " The domain name provided is not valid according to RFC 1034/1035"
 
         for host in [  # Valid-looking hosts
             'example.com',
@@ -699,7 +700,7 @@ class HostValidationTests(SimpleTestCase):
 
 
 @skipIf(connection.vendor == 'sqlite'
-        and connection.settings_dict['TEST_NAME'] in (None, '', ':memory:'),
+        and connection.settings_dict['TEST']['NAME'] in (None, '', ':memory:'),
         "Cannot establish two connections to an in-memory SQLite database.")
 class DatabaseConnectionHandlingTests(TransactionTestCase):
 
@@ -725,7 +726,7 @@ class DatabaseConnectionHandlingTests(TransactionTestCase):
         # request_finished signal.
         response = self.client.get('/')
         # Make sure there is an open connection
-        connection.cursor()
+        connection.ensure_connection()
         connection.enter_transaction_management()
         signals.request_finished.send(sender=response._handler_class)
         self.assertEqual(len(connection.transaction_state), 0)

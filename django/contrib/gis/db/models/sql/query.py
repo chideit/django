@@ -1,6 +1,7 @@
 from django.db import connections
 from django.db.models.query import sql
 
+from django.contrib.gis.db.models.constants import ALL_TERMS
 from django.contrib.gis.db.models.fields import GeometryField
 from django.contrib.gis.db.models.sql import aggregates as gis_aggregates
 from django.contrib.gis.db.models.sql.conversion import AreaField, DistanceField, GeomField
@@ -9,24 +10,11 @@ from django.contrib.gis.geometry.backend import Geometry
 from django.contrib.gis.measure import Area, Distance
 
 
-ALL_TERMS = set([
-    'bbcontains', 'bboverlaps', 'contained', 'contains',
-    'contains_properly', 'coveredby', 'covers', 'crosses', 'disjoint',
-    'distance_gt', 'distance_gte', 'distance_lt', 'distance_lte',
-    'dwithin', 'equals', 'exact',
-    'intersects', 'overlaps', 'relate', 'same_as', 'touches', 'within',
-    'left', 'right', 'overlaps_left', 'overlaps_right',
-    'overlaps_above', 'overlaps_below',
-    'strictly_above', 'strictly_below'
-])
-ALL_TERMS.update(sql.constants.QUERY_TERMS)
-
-
 class GeoQuery(sql.Query):
     """
     A single spatial SQL query.
     """
-    # Overridding the valid query terms.
+    # Overriding the valid query terms.
     query_terms = ALL_TERMS
     aggregates_module = gis_aggregates
 

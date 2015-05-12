@@ -39,7 +39,12 @@ You can evaluate a ``QuerySet`` in the following ways:
   ``QuerySet`` usually returns another unevaluated ``QuerySet``, but Django
   will execute the database query if you use the "step" parameter of slice
   syntax, and will return a list. Slicing a ``QuerySet`` that has been
-  evaluated (partially or fully) also returns a list.
+  evaluated also returns a list.
+
+  Also note that even though slicing an unevaluated ``QuerySet`` returns
+  another unevaluated ``QuerySet``, modifying it further (e.g., adding
+  more filters, or modifying ordering) is not allowed, since that does not
+  translate well into SQL and it would not have a clear meaning either.
 
 * **Pickling/Caching.** See the following section for details of what
   is involved when `pickling QuerySets`_. The important thing for the
@@ -52,21 +57,15 @@ You can evaluate a ``QuerySet`` in the following ways:
 * **len().** A ``QuerySet`` is evaluated when you call ``len()`` on it.
   This, as you might expect, returns the length of the result list.
 
-  Note: *Don't* use ``len()`` on ``QuerySet``\s if all you want to do is
-  determine the number of records in the set. It's much more efficient to
-  handle a count at the database level, using SQL's ``SELECT COUNT(*)``,
-  and Django provides a ``count()`` method for precisely this reason. See
-  ``count()`` below.
+  Note: If you only need to determine the number of records in the set (and
+  don't need the actual objects), it's much more efficient to handle a count
+  at the database level using SQL's ``SELECT COUNT(*)``. Django provides a
+  :meth:`~QuerySet.count` method for precisely this reason.
 
 * **list().** Force evaluation of a ``QuerySet`` by calling ``list()`` on
   it. For example::
 
       entry_list = list(Entry.objects.all())
-
-  Be warned, though, that this could have a large memory overhead, because
-  Django will load each element of the list into memory. In contrast,
-  iterating over a ``QuerySet`` will take advantage of your database to
-  load data and instantiate objects only as you need them.
 
 * **bool().** Testing a ``QuerySet`` in a boolean context, such as using
   ``bool()``, ``or``, ``and`` or an ``if`` statement, will cause the query
@@ -76,9 +75,8 @@ You can evaluate a ``QuerySet`` in the following ways:
       if Entry.objects.filter(headline="Test"):
          print("There is at least one Entry with the headline Test")
 
-  Note: *Don't* use this if all you want to do is determine if at least one
-  result exists, and don't need the actual objects. It's more efficient to
-  use :meth:`~QuerySet.exists` (see below).
+  Note: If you only want to determine if at least one result exists (and don't
+  need the actual objects), it's more efficient to use :meth:`~QuerySet.exists`.
 
 .. _pickling QuerySets:
 
@@ -282,9 +280,10 @@ and so on for as many models as you want to join. For example::
     Entry.objects.order_by('blog__name', 'headline')
 
 If you try to order by a field that is a relation to another model, Django will
-use the default ordering on the related model (or order by the related model's
+use the default ordering on the related model, or order by the related model's
 primary key if there is no :attr:`Meta.ordering
-<django.db.models.Options.ordering>` specified. For example::
+<django.db.models.Options.ordering>` specified. For example, since the ``Blog``
+model has no default ordering specified::
 
     Entry.objects.order_by('blog')
 
@@ -292,7 +291,22 @@ primary key if there is no :attr:`Meta.ordering
 
     Entry.objects.order_by('blog__id')
 
-...since the ``Blog`` model has no default ordering specified.
+If ``Blog`` had ``ordering = ['name']``, then the first queryset would be
+identical to::
+
+    Entry.objects.order_by('blog__name')
+
+.. versionadded:: 1.7
+
+    Note that it is also possible to order a queryset by a related field,
+    without incurring the cost of a JOIN, by referring to the ``_id`` of the
+    related field::
+
+        # No Join
+        Entry.objects.order_by('blog_id')
+
+        # Join
+        Entry.objects.order_by('blog__id')
 
 Be cautious when ordering by fields in related models if you are also using
 :meth:`distinct()`. See the note in :meth:`distinct` for an explanation of how
@@ -333,6 +347,11 @@ ordering, call :meth:`order_by()` with no parameters.
 You can tell if a query is ordered or not by checking the
 :attr:`.QuerySet.ordered` attribute, which will be ``True`` if the
 ``QuerySet`` has been ordered in any way.
+
+Each ``order_by()`` call will clear any previous ordering. For example, this
+query will be ordered by ``pub_date`` and not ``headline``::
+
+    Entry.objects.order_by('headline').order_by('pub_date')
 
 .. warning::
 
@@ -435,6 +454,21 @@ Examples (those after the first will only work on PostgreSQL)::
     >>> Entry.objects.order_by('author', 'pub_date').distinct('author')
     [...]
 
+.. note::
+    Keep in mind that :meth:`order_by` uses any default related model ordering
+    that has been defined. You might have to explicitly order by the relation
+    ``_id`` or referenced field to make sure the ``DISTINCT ON`` expressions
+    match those at the beginning of the ``ORDER BY`` clause. For example, if
+    the ``Blog`` model defined an :attr:`~django.db.models.Options.ordering` by
+    ``name``::
+
+        Entry.objects.order_by('blog').distinct('blog')
+
+    ...wouldn't work because the query would be ordered by ``blog__name`` thus
+    mismatching the ``DISTINCT ON`` expression. You'd have to explicitly order
+    by the relation `_id` field (``blog_id`` in this case) or the referenced
+    one (``blog__pk``) to make sure both expressions match.
+
 values
 ~~~~~~
 
@@ -502,14 +536,23 @@ A few subtleties that are worth mentioning:
   made after a ``values()`` call will have its extra selected fields
   ignored.
 
+* Calling :meth:`only()` and :meth:`defer()` after ``values()`` doesn't make
+  sense, so doing so will raise a ``NotImplementedError``.
+
+.. versionadded:: 1.7
+
+    The last point above is new. Previously, calling :meth:`only()` and
+    :meth:`defer()` after ``values()`` was allowed, but it either crashed or
+    returned incorrect results.
+
 A ``ValuesQuerySet`` is useful when you know you're only going to need values
 from a small number of the available fields and you won't need the
 functionality of a model instance object. It's more efficient to select only
 the fields you need to use.
 
-Finally, note a ``ValuesQuerySet`` is a subclass of ``QuerySet``, so it has all
-methods of ``QuerySet``. You can call ``filter()`` on it, or ``order_by()``, or
-whatever. Yes, that means these two calls are identical::
+Finally, note that a ``ValuesQuerySet`` is a subclass of ``QuerySet`` and it
+implements most of the same methods. You can call ``filter()`` on it,
+``order_by()``, etc. That means that these two calls are identical::
 
     Blog.objects.values().order_by('id')
     Blog.objects.order_by('id').values()
@@ -537,7 +580,7 @@ You can also refer to fields on related models with reverse relations through
 values_list
 ~~~~~~~~~~~
 
-.. method:: values_list(*fields)
+.. method:: values_list(*fields, flat=False)
 
 This is similar to ``values()`` except that instead of returning dictionaries,
 it returns tuples when iterated over. Each tuple contains the value from the
@@ -617,13 +660,13 @@ datetimes
 
 .. versionadded:: 1.6
 
-.. method:: datetimes(field, kind, order='ASC', tzinfo=None)
+.. method:: datetimes(field_name, kind, order='ASC', tzinfo=None)
 
 Returns a ``DateTimeQuerySet`` — a ``QuerySet`` that evaluates to a list of
 :class:`datetime.datetime` objects representing all available dates of a
 particular kind within the contents of the ``QuerySet``.
 
-``field`` should be the name of a ``DateTimeField`` of your model.
+``field_name`` should be the name of a ``DateTimeField`` of your model.
 
 ``kind`` should be either ``"year"``, ``"month"``, ``"day"``, ``"hour"``,
 ``"minute"`` or ``"second"``. Each ``datetime.datetime`` object in the result
@@ -656,7 +699,7 @@ object. If it's ``None``, Django uses the :ref:`current time zone
     .. _pytz: http://pytz.sourceforge.net/
     .. _Time Zones: http://www.postgresql.org/docs/current/static/datatype-datetime.html#DATATYPE-TIMEZONES
     .. _Choosing a Time Zone File: http://docs.oracle.com/cd/B19306_01/server.102/b14225/ch4datetime.htm#i1006667
-    .. _mysql_tzinfo_to_sql: http://dev.mysql.com/doc/refman/5.5/en/mysql-tzinfo-to-sql.html
+    .. _mysql_tzinfo_to_sql: http://dev.mysql.com/doc/refman/5.6/en/mysql-tzinfo-to-sql.html
 
 none
 ~~~~
@@ -684,6 +727,11 @@ Returns a *copy* of the current ``QuerySet`` (or ``QuerySet`` subclass).  This
 can be useful in situations where you might want to pass in either a model
 manager or a ``QuerySet`` and do further filtering on the result. After calling
 ``all()`` on either object, you'll definitely have a ``QuerySet`` to work with.
+
+When a ``QuerySet`` is :ref:`evaluated <when-querysets-are-evaluated>`, it
+typically caches its results. If the data in the database might have changed
+since a ``QuerySet`` was evaluated, you can get updated results for the same
+query by calling ``all()`` on a previously evaluated ``QuerySet``.
 
 select_related
 ~~~~~~~~~~~~~~
@@ -713,6 +761,24 @@ And here's ``select_related`` lookup::
     # in the previous query.
     b = e.blog
 
+You can use ``select_related()`` with any queryset of objects::
+
+    from django.utils import timezone
+
+    # Find all the blogs with entries scheduled to be published in the future.
+    blogs = set()
+
+    for e in Entry.objects.filter(pub_date__gt=timezone.now()).select_related('blog'):
+        # Without select_related(), this would make a database query for each
+        # loop iteration in order to fetch the related blog for each entry.
+        blogs.add(e.blog)
+
+The order of ``filter()`` and ``select_related()`` chaining isn't important.
+These querysets are equivalent::
+
+    Entry.objects.filter(pub_date__gt=timezone.now()).select_related('blog')
+    Entry.objects.select_related('blog').filter(pub_date__gt=timezone.now())
+
 You can follow foreign keys in a similar way to querying them. If you have the
 following models::
 
@@ -730,11 +796,10 @@ following models::
         # ...
         author = models.ForeignKey(Person)
 
-...then a call to ``Book.objects.select_related('person',
-'person__city').get(id=4)`` will cache the related ``Person`` *and* the related
-``City``::
+... then a call to ``Book.objects.select_related('author__hometown').get(id=4)``
+will cache the related ``Person`` *and* the related ``City``::
 
-    b = Book.objects.select_related('person__city').get(id=4)
+    b = Book.objects.select_related('author__hometown').get(id=4)
     p = b.author         # Doesn't hit the database.
     c = p.hometown       # Doesn't hit the database.
 
@@ -767,12 +832,14 @@ If you need to clear the list of related fields added by past calls of
 
    >>> without_relations = queryset.select_related(None)
 
+Chaining ``select_related`` calls works in a similar way to other methods -
+that is that ``select_related('foo', 'bar')`` is equivalent to
+``select_related('foo').select_related('bar')``.
+
 .. versionchanged:: 1.7
 
-Chaining ``select_related`` calls now works in a similar way to other methods -
-that is that ``select_related('foo', 'bar')`` is equivalent to
-``select_related('foo').select_related('bar')``. Previously the latter would
-have been equivalent to ``select_related('bar')``.
+    Previously the latter would have been equivalent to
+    ``select_related('bar')``.
 
 prefetch_related
 ~~~~~~~~~~~~~~~~
@@ -798,8 +865,8 @@ relationship, and does the 'joining' in Python. This allows it to prefetch
 many-to-many and many-to-one objects, which cannot be done using
 ``select_related``, in addition to the foreign key and one-to-one relationships
 that are supported by ``select_related``. It also supports prefetching of
-:class:`~django.contrib.contenttypes.generic.GenericRelation` and
-:class:`~django.contrib.contenttypes.generic.GenericForeignKey`.
+:class:`~django.contrib.contenttypes.fields.GenericRelation` and
+:class:`~django.contrib.contenttypes.fields.GenericForeignKey`.
 
 For example, suppose you have these models::
 
@@ -812,17 +879,16 @@ For example, suppose you have these models::
         name = models.CharField(max_length=50)
         toppings = models.ManyToManyField(Topping)
 
-        # On Python 3: def __str__(self):
-        def __unicode__(self):
-            return u"%s (%s)" % (self.name, u", ".join([topping.name
-                                                        for topping in self.toppings.all()]))
+        def __str__(self):              # __unicode__ on Python 2
+            return "%s (%s)" % (self.name, ", ".join([topping.name
+                                                      for topping in self.toppings.all()]))
 
 and run::
 
     >>> Pizza.objects.all()
-    [u"Hawaiian (ham, pineapple)", u"Seafood (prawns, smoked salmon)"...
+    ["Hawaiian (ham, pineapple)", "Seafood (prawns, smoked salmon)"...
 
-The problem with this is that every time ``Pizza.__unicode__()`` asks for
+The problem with this is that every time ``Pizza.__str__()`` asks for
 ``self.toppings.all()`` it has to query the database, so
 ``Pizza.objects.all()`` will run a query on the Toppings table for **every**
 item in the Pizza ``QuerySet``.
@@ -955,15 +1021,15 @@ This allows prefetching the same relation multiple times with a different
 
     >>> vegetarian_pizzas = Pizza.objects.filter(vegetarian=True)
     >>> Restaurant.objects.prefetch_related(
-    ...     Prefetch('pizzas', to_attr('menu')),
-    ...     Prefetch('pizzas', queryset=vegetarian_pizzas to_attr='vegetarian_menu'))
+    ...     Prefetch('pizzas', to_attr='menu'),
+    ...     Prefetch('pizzas', queryset=vegetarian_pizzas, to_attr='vegetarian_menu'))
 
 Lookups created with custom ``to_attr`` can still be traversed as usual by other
 lookups:
 
     >>> vegetarian_pizzas = Pizza.objects.filter(vegetarian=True)
     >>> Restaurant.objects.prefetch_related(
-    ...     Prefetch('pizzas', queryset=vegetarian_pizzas to_attr='vegetarian_menu'),
+    ...     Prefetch('pizzas', queryset=vegetarian_pizzas, to_attr='vegetarian_menu'),
     ...     'vegetarian_menu__toppings')
 
 Using ``to_attr`` is recommended when filtering down the prefetch result as it is
@@ -973,13 +1039,31 @@ less ambiguous than storing a filtered result in the related manager's cache:
     >>>
     >>> # Recommended:
     >>> restaurants = Restaurant.objects.prefetch_related(
-    ...     Prefetch('pizzas', to_attr='vegetarian_pizzas' queryset=queryset))
+    ...     Prefetch('pizzas', queryset=queryset, to_attr='vegetarian_pizzas'))
     >>> vegetarian_pizzas = restaurants[0].vegetarian_pizzas
     >>>
     >>> # Not recommended:
     >>> restaurants = Restaurant.objects.prefetch_related(
     ...     Prefetch('pizzas', queryset=queryset))
     >>> vegetarian_pizzas = restaurants[0].pizzas.all()
+
+Custom prefetching also works with single related relations like
+forward ``ForeignKey`` or ``OneToOneField``. Generally you'll want to use
+:meth:`select_related()` for these relations, but there are a number of cases
+where prefetching with a custom ``QuerySet`` is useful:
+
+* You want to use a ``QuerySet`` that performs further prefetching
+  on related models.
+
+* You want to prefetch only a subset of the related objects.
+
+* You want to use performance optimization techniques like
+  :meth:`deferred fields <defer()>`:
+
+    >>> queryset = Pizza.objects.only('name')
+    >>>
+    >>> restaurants = Restaurant.objects.prefetch_related(
+    ...     Prefetch('best_pizza', queryset=queryset))
 
 .. note::
 
@@ -1019,6 +1103,13 @@ Sometimes, the Django query syntax by itself can't easily express a complex
 ``WHERE`` clause. For these edge cases, Django provides the ``extra()``
 ``QuerySet`` modifier — a hook for injecting specific clauses into the SQL
 generated by a ``QuerySet``.
+
+.. warning::
+
+    You should be very careful whenever you use ``extra()``. Every time you use
+    it, you should escape any parameters that the user can control by using
+    ``params`` in order to protect against SQL injection attacks . Please
+    read more about :ref:`SQL injection protection <sql-injection-protection>`.
 
 By definition, these extra lookups may not be portable to different database
 engines (because you're explicitly writing SQL code) and violate the DRY
@@ -1176,6 +1267,16 @@ of the arguments is required, but you should use at least one of them.
 
       Entry.objects.extra(where=['headline=%s'], params=['Lennon'])
 
+.. warning::
+
+    If you are performing queries on MySQL, note that MySQL's silent type coercion
+    may cause unexpected results when mixing types. If you query on a string
+    type column, but with an integer value, MySQL will coerce the types of all values
+    in the table to an integer before performing the comparison. For example, if your
+    table contains the values ``'abc'``, ``'def'`` and you query for ``WHERE mycolumn=0``,
+    both rows will match. To prevent this, perform the correct typecasting
+    before using the value in a query.
+
 defer
 ~~~~~
 
@@ -1244,6 +1345,30 @@ one, doing so will result in an error.
     might otherwise call ``defer()``. This makes your code more explicit to the
     reader, is slightly faster and consumes a little less memory in the Python
     process.
+
+    For example, both of these models use the same underlying database table::
+
+        class CommonlyUsedModel(models.Model):
+            f1 = models.CharField(max_length=10)
+
+            class Meta:
+                managed = False
+                db_table = 'app_largetable'
+
+        class ManagedModel(models.Model):
+            f1 = models.CharField(max_length=10)
+            f2 = models.CharField(max_length=10)
+
+            class Meta:
+                db_table = 'app_largetable'
+
+        # Two equivalent QuerySets:
+        CommonlyUsedModel.objects.all()
+        ManagedModel.objects.all().defer('f2')
+
+    If many fields need to be duplicated in the unmanaged model, it may be best
+    to create an abstract model with the shared fields and then have the
+    unmanaged and managed models inherit from the abstract model.
 
 .. note::
 
@@ -1347,13 +1472,34 @@ backends support ``select_for_update()``. However, MySQL has no support for the
 ``nowait`` argument. Obviously, users of external third-party backends should
 check with their backend's documentation for specifics in those cases.
 
-Passing ``nowait=True`` to ``select_for_update`` using database backends that
+Passing ``nowait=True`` to ``select_for_update()`` using database backends that
 do not support ``nowait``, such as MySQL, will cause a
 :exc:`~django.db.DatabaseError` to be raised. This is in order to prevent code
 unexpectedly blocking.
 
-Using ``select_for_update`` on backends which do not support
+Evaluating a queryset with ``select_for_update()`` in autocommit mode is
+a :exc:`~django.db.transaction.TransactionManagementError` error because the
+rows are not locked in that case. If allowed, this would facilitate data
+corruption and could easily be caused by calling code that expects to be run in
+a transaction outside of one.
+
+Using ``select_for_update()`` on backends which do not support
 ``SELECT ... FOR UPDATE`` (such as SQLite) will have no effect.
+
+.. versionchanged:: 1.6.3
+
+    It is now an error to execute a query with ``select_for_update()`` in
+    autocommit mode. With earlier releases in the 1.6 series it was a no-op.
+
+.. warning::
+
+    Although ``select_for_update()`` normally fails in autocommit mode, since
+    :class:`~django.test.TestCase` automatically wraps each test in a
+    transaction, calling ``select_for_update()`` in a ``TestCase`` even outside
+    an :func:`~django.db.transaction.atomic()` block will (perhaps unexpectedly)
+    pass without raising a ``TransactionManagementError``. To properly test
+    ``select_for_update()`` you should use
+    :class:`~django.test.TransactionTestCase`.
 
 raw
 ~~~
@@ -1369,7 +1515,7 @@ Takes a raw SQL query, executes it, and returns a
 ``django.db.models.query.RawQuerySet`` instance. This ``RawQuerySet`` instance
 can be iterated over just like an normal ``QuerySet`` to provide object instances.
 
-See the :ref:`executing-raw-queries` for more information.
+See the :doc:`/topics/db/sql` for more information.
 
 .. warning::
 
@@ -1517,11 +1663,11 @@ where ``get_or_create`` will raise an :exc:`~django.db.IntegrityError` but the
 object won't appear in a subsequent :meth:`~django.db.models.query.QuerySet.get`
 call.
 
-Finally, a word on using ``get_or_create()`` in Django views: please make sure
-to use it only in ``POST`` requests unless you have a good reason not to
-``GET`` requests shouldn't have any effect on data; use ``POST`` whenever a
-request to a page has a side effect on your data. For more, see `Safe methods`_
-in the HTTP spec.
+Finally, a word on using ``get_or_create()`` in Django views. Please make sure
+to use it only in ``POST`` requests unless you have a good reason not to.
+``GET`` requests shouldn't have any effect on data. Instead, use ``POST``
+whenever a request to a page has a side effect on your data. For more, see
+`Safe methods`_ in the HTTP spec.
 
 .. _Safe methods: http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.1.1
 
@@ -1625,10 +1771,11 @@ This has a number of caveats though:
 * It does not work with child models in a multi-table inheritance scenario.
 * If the model's primary key is an :class:`~django.db.models.AutoField` it
   does not retrieve and set the primary key attribute, as ``save()`` does.
+* It does not work with many-to-many relationships.
 
 The ``batch_size`` parameter controls how many objects are created in single
 query. The default is to create all objects in one batch, except for SQLite
-where the default is such that at maximum 999 variables per query is used.
+where the default is such that at most 999 variables per query are used.
 
 count
 ~~~~~
@@ -1655,6 +1802,11 @@ Depending on which database you're using (e.g. PostgreSQL vs. MySQL),
 ``count()`` may return a long integer instead of a normal Python integer. This
 is an underlying implementation quirk that shouldn't pose any real-world
 problems.
+
+Note that if you want the number of items in a ``QuerySet`` and are also
+retrieving model instances from it (for example, by iterating over it), it's
+probably more efficient to use ``len(queryset)`` which won't cause an extra
+database query like ``count()`` would.
 
 in_bulk
 ~~~~~~~
@@ -1994,6 +2146,12 @@ specified as keyword arguments to the ``QuerySet`` methods :meth:`filter()`,
 For an introduction, see :ref:`models and database queries documentation
 <field-lookups-intro>`.
 
+Django's inbuilt lookups are listed below. It is also possible to write
+:doc:`custom lookups </howto/custom-lookups>` for model fields.
+
+As a convenience when no lookup type is provided (like in
+``Entry.objects.get(id=14)``) the lookup type is assumed to be :lookup:`exact`.
+
 .. fieldlookup:: exact
 
 exact
@@ -2028,16 +2186,23 @@ iexact
 
 Case-insensitive exact match.
 
+.. versionchanged:: 1.7
+
+    If the value provided for comparison is ``None``, it will be interpreted
+    as an SQL ``NULL`` (see :lookup:`isnull` for more details).
+
 Example::
 
     Blog.objects.get(name__iexact='beatles blog')
+    Blog.objects.get(name__iexact=None)
 
-SQL equivalent::
+SQL equivalents::
 
     SELECT ... WHERE name ILIKE 'beatles blog';
+    SELECT ... WHERE name IS NULL;
 
-Note this will match ``'Beatles Blog'``, ``'beatles blog'``, ``'BeAtLes
-BLoG'``, etc.
+Note the first query will match ``'Beatles Blog'``, ``'beatles blog'``,
+``'BeAtLes BLoG'``, etc.
 
 .. admonition:: SQLite users
 
@@ -2131,6 +2296,8 @@ extract two field values, where only one is expected::
     # Bad code! Will raise a TypeError.
     inner_qs = Blog.objects.filter(name__contains='Ch').values('name', 'id')
     entries = Entry.objects.filter(blog__name__in=inner_qs)
+
+.. _nested-queries-performance:
 
 .. admonition:: Performance considerations
 
@@ -2491,8 +2658,7 @@ Note this is only available in MySQL and requires direct manipulation of the
 database to add the full-text index. By default Django uses BOOLEAN MODE for
 full text searches. See the `MySQL documentation`_ for additional details.
 
-.. _MySQL documentation: http://dev.mysql.com/doc/refman/5.1/en/fulltext-boolean.html
-
+.. _MySQL documentation: http://dev.mysql.com/doc/refman/5.6/en/fulltext-boolean.html
 
 .. fieldlookup:: regex
 
@@ -2563,6 +2729,13 @@ aggregate functions, see
     currently emulates these features using a text field. Attempts to use
     aggregation on date/time fields in SQLite will raise
     ``NotImplementedError``.
+
+.. admonition:: Note
+
+    Aggregation functions return ``None`` when used with an empty
+    ``QuerySet``. For example, the ``Sum`` aggregation function returns ``None``
+    instead of ``0`` if the ``QuerySet`` contains no entries. An exception is
+    ``Count``, which does return ``0`` if the ``QuerySet`` is empty.
 
 Avg
 ~~~

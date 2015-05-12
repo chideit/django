@@ -1,14 +1,14 @@
 from __future__ import unicode_literals
 
+from django.contrib.admin import TabularInline, ModelAdmin
 from django.contrib.admin.tests import AdminSeleniumWebDriverTestCase
 from django.contrib.admin.helpers import InlineAdminForm
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings, RequestFactory
 
 # local test models
-from .admin import InnerInline
+from .admin import InnerInline, site as admin_site
 from .models import (Holder, Inner, Holder2, Inner2, Holder3, Inner3, Person,
     OutfitItem, Fashionista, Teacher, Parent, Child, Author, Book, Profile,
     ProfileCollection, ParentModelWithCustomPk, ChildModel1, ChildModel2,
@@ -29,6 +29,7 @@ class TestInline(TestCase):
 
         result = self.client.login(username='super', password='secret')
         self.assertEqual(result, True)
+        self.factory = RequestFactory()
 
     def tearDown(self):
         self.client.logout()
@@ -64,7 +65,7 @@ class TestInline(TestCase):
     def test_inline_primary(self):
         person = Person.objects.create(firstname='Imelda')
         item = OutfitItem.objects.create(name='Shoes')
-        # Imelda likes shoes, but can't cary her own bags.
+        # Imelda likes shoes, but can't carry her own bags.
         data = {
             'shoppingweakness_set-TOTAL_FORMS': 1,
             'shoppingweakness_set-INITIAL_FORMS': 0,
@@ -92,7 +93,7 @@ class TestInline(TestCase):
             'title_set-0-title2': 'a different title',
         }
         response = self.client.post('/admin/admin_inlines/titlecollection/add/', data)
-        # Here colspan is "4": two fields (title1 and title2), one hidden field and the delete checkbock.
+        # Here colspan is "4": two fields (title1 and title2), one hidden field and the delete checkbox.
         self.assertContains(response, '<tr><td colspan="4"><ul class="errorlist"><li>The two titles must be the same</li></ul></td></tr>')
 
     def test_no_parent_callable_lookup(self):
@@ -110,7 +111,7 @@ class TestInline(TestCase):
         self.assertEqual(response.status_code, 200)
         # Add parent object view should have the child inlines section
         self.assertContains(response, '<div class="inline-group" id="question_set-group">')
-        # The right callabe should be used for the inline readonly_fields
+        # The right callable should be used for the inline readonly_fields
         # column cells
         self.assertContains(response, '<p>Callable in QuestionInline</p>')
 
@@ -222,6 +223,61 @@ class TestInline(TestCase):
         self.assertContains(response, max_forms_input % 2)
         self.assertContains(response, total_forms_hidden)
 
+    def test_min_num(self):
+        """
+        Ensure that min_num and extra determine number of forms.
+        """
+        class MinNumInline(TabularInline):
+            model = BinaryTree
+            min_num = 2
+            extra = 3
+
+        modeladmin = ModelAdmin(BinaryTree, admin_site)
+        modeladmin.inlines = [MinNumInline]
+
+        min_forms = '<input id="id_binarytree_set-MIN_NUM_FORMS" name="binarytree_set-MIN_NUM_FORMS" type="hidden" value="2" />'
+        total_forms = '<input id="id_binarytree_set-TOTAL_FORMS" name="binarytree_set-TOTAL_FORMS" type="hidden" value="5" />'
+
+        request = self.factory.get('/admin/admin_inlines/binarytree/add/')
+        request.user = User(username='super', is_superuser=True)
+        response = modeladmin.changeform_view(request)
+        self.assertContains(response, min_forms)
+        self.assertContains(response, total_forms)
+
+    def test_custom_min_num(self):
+        """
+        Ensure that get_min_num is called and used correctly.
+        """
+        bt_head = BinaryTree.objects.create(name="Tree Head")
+        BinaryTree.objects.create(name="First Child", parent=bt_head)
+
+        class MinNumInline(TabularInline):
+            model = BinaryTree
+            extra = 3
+
+            def get_min_num(self, request, obj=None, **kwargs):
+                if obj:
+                    return 5
+                return 2
+
+        modeladmin = ModelAdmin(BinaryTree, admin_site)
+        modeladmin.inlines = [MinNumInline]
+
+        min_forms = '<input id="id_binarytree_set-MIN_NUM_FORMS" name="binarytree_set-MIN_NUM_FORMS" type="hidden" value="%d" />'
+        total_forms = '<input id="id_binarytree_set-TOTAL_FORMS" name="binarytree_set-TOTAL_FORMS" type="hidden" value="%d" />'
+
+        request = self.factory.get('/admin/admin_inlines/binarytree/add/')
+        request.user = User(username='super', is_superuser=True)
+        response = modeladmin.changeform_view(request)
+        self.assertContains(response, min_forms % 2)
+        self.assertContains(response, total_forms % 5)
+
+        request = self.factory.get("/admin/admin_inlines/binarytree/%d/" % bt_head.id)
+        request.user = User(username='super', is_superuser=True)
+        response = modeladmin.changeform_view(request, object_id=str(bt_head.id))
+        self.assertContains(response, min_forms % 5)
+        self.assertContains(response, total_forms % 8)
+
     def test_inline_nonauto_noneditable_pk(self):
         response = self.client.get('/admin/admin_inlines/author/add/')
         self.assertContains(response,
@@ -239,6 +295,21 @@ class TestInline(TestCase):
         self.assertContains(response,
             '<input class="vIntegerField" id="id_editablepkbook_set-2-0-manual_pk" name="editablepkbook_set-2-0-manual_pk" type="text" />',
              html=True, count=1)
+
+    def test_stacked_inline_edit_form_contains_has_original_class(self):
+        holder = Holder.objects.create(dummy=1)
+        holder.inner_set.create(dummy=1)
+        response = self.client.get('/admin/admin_inlines/holder/%s/' % holder.pk)
+        self.assertContains(
+            response,
+            '<div class="inline-related has_original" id="inner_set-0">',
+            count=1
+        )
+        self.assertContains(
+            response,
+            '<div class="inline-related" id="inner_set-1">',
+            count=1
+        )
 
 
 @override_settings(PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',))
@@ -371,7 +442,7 @@ class TestInlinePermissions(TestCase):
         author = Author.objects.create(pk=1, name='The Author')
         book = author.books.create(name='The inline Book')
         self.author_change_url = '/admin/admin_inlines/author/%i/' % author.id
-        # Get the ID of the automatically created intermediate model for thw Author-Book m2m
+        # Get the ID of the automatically created intermediate model for the Author-Book m2m
         author_book_auto_m2m_intermediate = Author.books.through.objects.get(author=author, book=book)
         self.author_book_auto_m2m_intermediate_id = author_book_auto_m2m_intermediate.pk
 

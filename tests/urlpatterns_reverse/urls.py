@@ -1,10 +1,11 @@
 from django.conf.urls import patterns, url, include
 
-from .views import empty_view, absolute_kwargs_view
+from .views import empty_view, empty_view_partial, empty_view_wrapped, absolute_kwargs_view
 
 
 other_patterns = patterns('',
     url(r'non_path_include/$', empty_view, name='non_path_include'),
+    url(r'nested_path/$', 'urlpatterns_reverse.views.nested_view'),
 )
 
 urlpatterns = patterns('',
@@ -32,12 +33,9 @@ urlpatterns = patterns('',
     url(r'^price/\$(\d+)/$', empty_view, name="price"),
     url(r'^price/[$](\d+)/$', empty_view, name="price2"),
     url(r'^price/[\$](\d+)/$', empty_view, name="price3"),
-    url(r'^product/(?P<product>\w+)\+\(\$(?P<price>\d+(\.\d+)?)\)/$',
-            empty_view, name="product"),
-    url(r'^headlines/(?P<year>\d+)\.(?P<month>\d+)\.(?P<day>\d+)/$', empty_view,
-            name="headlines"),
-    url(r'^windows_path/(?P<drive_name>[A-Z]):\\(?P<path>.+)/$', empty_view,
-            name="windows"),
+    url(r'^product/(?P<product>\w+)\+\(\$(?P<price>\d+(\.\d+)?)\)/$', empty_view, name="product"),
+    url(r'^headlines/(?P<year>\d+)\.(?P<month>\d+)\.(?P<day>\d+)/$', empty_view, name="headlines"),
+    url(r'^windows_path/(?P<drive_name>[A-Z]):\\(?P<path>.+)/$', empty_view, name="windows"),
     url(r'^special_chars/(?P<chars>.+)/$', empty_view, name="special"),
     url(r'^(?P<name>.+)/\d+/$', empty_view, name="mixed"),
     url(r'^repeats/a{1,2}/$', empty_view, name="repeats"),
@@ -46,12 +44,16 @@ urlpatterns = patterns('',
     url(r'^(?i)CaseInsensitive/(\w+)', empty_view, name="insensitive"),
     url(r'^test/1/?', empty_view, name="test"),
     url(r'^(?i)test/2/?$', empty_view, name="test2"),
-    url(r'^outer/(?P<outer>\d+)/',
-            include('urlpatterns_reverse.included_urls')),
+    url(r'^outer/(?P<outer>\d+)/', include('urlpatterns_reverse.included_urls')),
+    url(r'^outer-no-kwargs/(\d+)/', include('urlpatterns_reverse.included_no_kwargs_urls')),
     url('', include('urlpatterns_reverse.extra_urls')),
 
     # This is non-reversible, but we shouldn't blow up when parsing it.
     url(r'^(?:foo|bar)(\w+)/$', empty_view, name="disjunction"),
+
+    # Partials should be fine.
+    url(r'^partial/', empty_view_partial, name="partial"),
+    url(r'^partial_wrapped/', empty_view_wrapped, name="partial_wrapped"),
 
     # Regression views for #9038. See tests for more details
     url(r'arg_view/$', 'kwargs_view'),
@@ -64,4 +66,7 @@ urlpatterns = patterns('',
     (r'defaults_view2/(?P<arg1>\d+)/', 'defaults_view', {'arg2': 2}, 'defaults'),
 
     url('^includes/', include(other_patterns)),
+
+    # Security tests
+    url('(.+)/security/$', empty_view, name='security'),
 )

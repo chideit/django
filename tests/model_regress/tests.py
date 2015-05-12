@@ -2,10 +2,14 @@ from __future__ import unicode_literals
 
 import datetime
 from operator import attrgetter
+import os
+import pickle
+import subprocess
 import sys
 import unittest
 
 from django.core.exceptions import ValidationError
+from django.core.files.temp import NamedTemporaryFile
 from django.test import TestCase, skipUnlessDBFeature
 from django.utils import six
 from django.utils.timezone import get_fixed_timezone
@@ -65,6 +69,17 @@ class ModelTests(TestCase):
         )
         a = Article.objects.get(pk=a.pk)
         self.assertEqual(len(a.article_text), 5000)
+
+    def test_long_unicode_textfield(self):
+        # TextFields can hold more than 4000 bytes also when they are
+        # less than 4000 characters
+        a = Article.objects.create(
+            headline="Really, really big",
+            pub_date=datetime.datetime.now(),
+            article_text='\u05d0\u05d1\u05d2' * 1000
+        )
+        a = Article.objects.get(pk=a.pk)
+        self.assertEqual(len(a.article_text), 3000)
 
     def test_date_lookup(self):
         # Regression test for #659
@@ -140,7 +155,7 @@ class ModelTests(TestCase):
 
     def test_date_filter_null(self):
         # Date filtering was failing with NULL date values in SQLite
-        # (regression test for #3501, amongst other things).
+        # (regression test for #3501, among other things).
         Party.objects.create(when=datetime.datetime(1999, 1, 1))
         Party.objects.create()
         p = Party.objects.filter(when__month=1)[0]
@@ -234,3 +249,43 @@ class EvaluateMethodTest(TestCase):
         dept = Department.objects.create(pk=1, name='abc')
         dept.evaluate = 'abc'
         Worker.objects.filter(department=dept)
+
+
+class ModelPickleTestCase(TestCase):
+    def test_unpickling_when_appregistrynotready(self):
+        """
+        #24007 -- Verifies that a pickled model can be unpickled without having
+        to manually setup the apps registry beforehand.
+        """
+        script_template = """#!/usr/bin/env python
+import pickle
+
+from django.conf import settings
+
+data = %r
+
+settings.configure(DEBUG=False, INSTALLED_APPS=('model_regress',), SECRET_KEY = "blah")
+article = pickle.loads(data)
+print(article.headline)"""
+        a = Article.objects.create(
+            headline="Some object",
+            pub_date=datetime.datetime.now(),
+            article_text="This is an article",
+        )
+
+        with NamedTemporaryFile(mode='w+', suffix=".py", dir='.') as script:
+            script.write(script_template % pickle.dumps(a))
+            script.flush()
+            env = {
+                # Needed to run test outside of tests directory
+                str('PYTHONPATH'): os.pathsep.join(sys.path),
+                # Needed on Windows because http://bugs.python.org/issue8557
+                str('PATH'): os.environ['PATH'],
+            }
+            if 'SYSTEMROOT' in os.environ:  # Windows http://bugs.python.org/issue20614
+                env[str('SYSTEMROOT')] = os.environ['SYSTEMROOT']
+            try:
+                result = subprocess.check_output([sys.executable, script.name], env=env)
+            except subprocess.CalledProcessError:
+                self.fail("Unable to reload model pickled data")
+        self.assertEqual(result.strip().decode(), "Some object")

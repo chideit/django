@@ -26,13 +26,12 @@ except ImproperlyConfigured:
 
 class FileTests(unittest.TestCase):
     def test_unicode_uploadedfile_name(self):
-        """
-        Regression test for #8156: files with unicode names I can't quite figure
-        out the encoding situation between doctest and this file, but the actual
-        repr doesn't matter; it just shouldn't return a unicode object.
-        """
         uf = UploadedFile(name='¿Cómo?', content_type='text')
-        self.assertEqual(type(uf.__repr__()), str)
+        self.assertIs(type(repr(uf)), str)
+
+    def test_unicode_file_name(self):
+        f = File(None, 'djángö')
+        self.assertIs(type(repr(f)), str)
 
     def test_context_manager(self):
         orig_file = tempfile.TemporaryFile()
@@ -63,6 +62,14 @@ class FileTests(unittest.TestCase):
         file = SimpleUploadedFile("mode_test.txt", b"content")
         self.assertFalse(hasattr(file, 'mode'))
         gzip.GzipFile(fileobj=file)
+
+    def test_file_iteration(self):
+        """
+        File objects should yield lines when iterated over.
+        Refs #22107.
+        """
+        file = File(BytesIO(b'one\ntwo\nthree'))
+        self.assertEqual(list(file), [b'one\n', b'two\n', b'three'])
 
 
 class NoNameFileTestCase(unittest.TestCase):
@@ -161,9 +168,9 @@ class InconsistentGetImageDimensionsBug(unittest.TestCase):
         Multiple calls of get_image_dimensions() should return the same size.
         """
         img_path = os.path.join(os.path.dirname(upath(__file__)), "test.png")
-        with open(img_path, 'rb') as file:
-            image = images.ImageFile(file)
-            image_pil = Image.open(img_path)
+        with open(img_path, 'rb') as fh:
+            image = images.ImageFile(fh)
+            image_pil = Image.open(fh)
             size_1 = images.get_image_dimensions(image)
             size_2 = images.get_image_dimensions(image)
         self.assertEqual(image_pil.size, size_1)
@@ -180,7 +187,8 @@ class InconsistentGetImageDimensionsBug(unittest.TestCase):
             size = images.get_image_dimensions(img_path)
         except zlib.error:
             self.fail("Exception raised from get_image_dimensions().")
-        self.assertEqual(size, Image.open(img_path).size)
+        with open(img_path, 'rb') as fh:
+            self.assertEqual(size, Image.open(fh).size)
 
 
 class FileMoveSafeTests(unittest.TestCase):

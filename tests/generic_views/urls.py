@@ -55,7 +55,8 @@ urlpatterns = patterns('',
         views.AuthorDetail.as_view(queryset=None)),
     (r'^detail/nonmodel/1/$',
         views.NonModelDetail.as_view()),
-
+    (r'^detail/doesnotexist/(?P<pk>\d+)/$',
+        views.ObjectDoesNotExistDetail.as_view()),
     # FormView
     (r'^contact/$',
         views.ContactView.as_view()),
@@ -163,7 +164,7 @@ urlpatterns = patterns('',
         views.AuthorListCustomPaginator.as_view()),
 
     # YearArchiveView
-    # Mixing keyword and possitional captures below is intentional; the views
+    # Mixing keyword and positional captures below is intentional; the views
     # ought to be able to accept either.
     (r'^dates/books/(?P<year>\d{4})/$',
         views.BookYearArchive.as_view()),

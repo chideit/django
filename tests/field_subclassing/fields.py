@@ -20,6 +20,11 @@ class Small(object):
     def __str__(self):
         return '%s%s' % (force_text(self.first), force_text(self.second))
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.first == other.first and self.second == other.second
+        return False
+
 
 class SmallField(six.with_metaclass(models.SubfieldBase, models.Field)):
     """
@@ -59,7 +64,7 @@ class SmallerField(SmallField):
 
 class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
 
-    description = ("JSONField automatically serializes and desializes values to "
+    description = ("JSONField automatically serializes and deserializes values to "
         "and from JSON.")
 
     def to_python(self, value):
@@ -74,3 +79,8 @@ class JSONField(six.with_metaclass(models.SubfieldBase, models.TextField)):
         if value is None:
             return None
         return json.dumps(value)
+
+
+class CustomTypedField(models.TextField):
+    def db_type(self, connection):
+        return 'custom_field'

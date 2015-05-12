@@ -67,13 +67,13 @@ class SimpleListFilter(ListFilter):
             raise ImproperlyConfigured(
                 "The list filter '%s' does not specify "
                 "a 'parameter_name'." % self.__class__.__name__)
+        if self.parameter_name in params:
+            value = params.pop(self.parameter_name)
+            self.used_parameters[self.parameter_name] = value
         lookup_choices = self.lookups(request, model_admin)
         if lookup_choices is None:
             lookup_choices = ()
         self.lookup_choices = list(lookup_choices)
-        if self.parameter_name in params:
-            value = params.pop(self.parameter_name)
-            self.used_parameters[self.parameter_name] = value
 
     def has_output(self):
         return len(self.lookup_choices) > 0
@@ -179,9 +179,9 @@ class RelatedFieldListFilter(FieldListFilter):
         self.title = self.lookup_title
 
     def has_output(self):
-        if (isinstance(self.field, models.related.RelatedObject)
-                and self.field.field.null or hasattr(self.field, 'rel')
-                    and self.field.null):
+        if (isinstance(self.field, models.related.RelatedObject) and
+                self.field.field.null or hasattr(self.field, 'rel') and
+                self.field.null):
             extra = 1
         else:
             extra = 0
@@ -206,9 +206,9 @@ class RelatedFieldListFilter(FieldListFilter):
                 }, [self.lookup_kwarg_isnull]),
                 'display': val,
             }
-        if (isinstance(self.field, models.related.RelatedObject)
-                and self.field.field.null or hasattr(self.field, 'rel')
-                    and self.field.null):
+        if (isinstance(self.field, models.related.RelatedObject) and
+                self.field.field.null or hasattr(self.field, 'rel') and
+                self.field.null):
             yield {
                 'selected': bool(self.lookup_val_isnull),
                 'query_string': cl.get_query_string({

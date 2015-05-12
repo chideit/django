@@ -2,8 +2,6 @@ from datetime import datetime
 import sys
 import unittest
 
-from django.http import HttpResponse, utils
-from django.test import RequestFactory
 from django.utils.datastructures import MultiValueDict
 from django.utils import http
 from django.utils import six
@@ -67,50 +65,6 @@ class TestUtilsHttp(unittest.TestCase):
         ]
         self.assertTrue(result in acceptable_results)
 
-    def test_fix_IE_for_vary(self):
-        """
-        Regression for #16632.
-
-        `fix_IE_for_vary` shouldn't crash when there's no Content-Type header.
-        """
-
-        # functions to generate responses
-        def response_with_unsafe_content_type():
-            r = HttpResponse(content_type="text/unsafe")
-            r['Vary'] = 'Cookie'
-            return r
-
-        def no_content_response_with_unsafe_content_type():
-            # 'Content-Type' always defaulted, so delete it
-            r = response_with_unsafe_content_type()
-            del r['Content-Type']
-            return r
-
-        # request with & without IE user agent
-        rf = RequestFactory()
-        request = rf.get('/')
-        ie_request = rf.get('/', HTTP_USER_AGENT='MSIE')
-
-        # not IE, unsafe_content_type
-        response = response_with_unsafe_content_type()
-        utils.fix_IE_for_vary(request, response)
-        self.assertTrue('Vary' in response)
-
-        # IE, unsafe_content_type
-        response = response_with_unsafe_content_type()
-        utils.fix_IE_for_vary(ie_request, response)
-        self.assertFalse('Vary' in response)
-
-        # not IE, no_content
-        response = no_content_response_with_unsafe_content_type()
-        utils.fix_IE_for_vary(request, response)
-        self.assertTrue('Vary' in response)
-
-        # IE, no_content
-        response = no_content_response_with_unsafe_content_type()
-        utils.fix_IE_for_vary(ie_request, response)
-        self.assertFalse('Vary' in response)
-
     def test_base36(self):
         # reciprocity works
         for n in [0, 1, 1000, 1000000]:
@@ -135,29 +89,68 @@ class TestUtilsHttp(unittest.TestCase):
             self.assertEqual(http.int_to_base36(n), b36)
             self.assertEqual(http.base36_to_int(b36), n)
 
+    def test_is_safe_url(self):
+        for bad_url in ('http://example.com',
+                        'http:///example.com',
+                        'https://example.com',
+                        'ftp://exampel.com',
+                        r'\\example.com',
+                        r'\\\example.com',
+                        r'/\\/example.com',
+                        r'\\\example.com',
+                        r'\\example.com',
+                        r'\\//example.com',
+                        r'/\/example.com',
+                        r'\/example.com',
+                        r'/\example.com',
+                        'http:///example.com',
+                        'http:/\//example.com',
+                        'http:\/example.com',
+                        'http:/\example.com',
+                        'javascript:alert("XSS")',
+                        '\njavascript:alert(x)',
+                        '\x08//example.com',
+                        '\n'):
+            self.assertFalse(http.is_safe_url(bad_url, host='testserver'), "%s should be blocked" % bad_url)
+        for good_url in ('/view/?param=http://example.com',
+                     '/view/?param=https://example.com',
+                     '/view?param=ftp://exampel.com',
+                     'view/?param=//example.com',
+                     'https://testserver/',
+                     'HTTPS://testserver/',
+                     '//testserver/',
+                     '/url%20with%20spaces/'):
+            self.assertTrue(http.is_safe_url(good_url, host='testserver'), "%s should be allowed" % good_url)
+
+    def test_urlsafe_base64_roundtrip(self):
+        bytestring = b'foo'
+        encoded = http.urlsafe_base64_encode(bytestring)
+        decoded = http.urlsafe_base64_decode(encoded)
+        self.assertEqual(bytestring, decoded)
+
 
 class ETagProcessingTests(unittest.TestCase):
-    def testParsing(self):
+    def test_parsing(self):
         etags = http.parse_etags(r'"", "etag", "e\"t\"ag", "e\\tag", W/"weak"')
         self.assertEqual(etags, ['', 'etag', 'e"t"ag', r'e\tag', 'weak'])
 
-    def testQuoting(self):
+    def test_quoting(self):
         quoted_etag = http.quote_etag(r'e\t"ag')
         self.assertEqual(quoted_etag, r'"e\\t\"ag"')
 
 
 class HttpDateProcessingTests(unittest.TestCase):
-    def testParsingRfc1123(self):
+    def test_parsing_rfc1123(self):
         parsed = http.parse_http_date('Sun, 06 Nov 1994 08:49:37 GMT')
         self.assertEqual(datetime.utcfromtimestamp(parsed),
                          datetime(1994, 11, 6, 8, 49, 37))
 
-    def testParsingRfc850(self):
+    def test_parsing_rfc850(self):
         parsed = http.parse_http_date('Sunday, 06-Nov-94 08:49:37 GMT')
         self.assertEqual(datetime.utcfromtimestamp(parsed),
                          datetime(1994, 11, 6, 8, 49, 37))
 
-    def testParsingAsctime(self):
+    def test_parsing_asctime(self):
         parsed = http.parse_http_date('Sun Nov  6 08:49:37 1994')
         self.assertEqual(datetime.utcfromtimestamp(parsed),
                          datetime(1994, 11, 6, 8, 49, 37))

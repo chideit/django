@@ -1,8 +1,9 @@
 from __future__ import unicode_literals
 
 from django import forms
-from django.contrib.contenttypes.generic import generic_inlineformset_factory
+from django.contrib.contenttypes.forms import generic_inlineformset_factory
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldError
 from django.test import TestCase
 from django.utils import six
 
@@ -42,6 +43,17 @@ class GenericRelationsTests(TestCase):
         # You can easily access the content object like a foreign key.
         t = TaggedItem.objects.get(tag="salty")
         self.assertEqual(t.content_object, bacon)
+        qs = TaggedItem.objects.filter(animal__isnull=False).order_by('animal__common_name', 'tag')
+        self.assertQuerysetEqual(
+            qs, ["<TaggedItem: hairy>", "<TaggedItem: yellow>", "<TaggedItem: fatty>"]
+        )
+        mpk = ManualPK.objects.create(id=1)
+        mpk.tags.create(tag='mpk')
+        from django.db.models import Q
+        qs = TaggedItem.objects.filter(Q(animal__isnull=False) | Q(manualpk__id=1)).order_by('tag')
+        self.assertQuerysetEqual(
+            qs, ["fatty", "hairy", "mpk", "yellow"], lambda x: x.tag)
+        mpk.delete()
 
         # Recall that the Mineral class doesn't have an explicit GenericRelation
         # defined. That's OK, because you can create TaggedItems explicitly.
@@ -150,6 +162,12 @@ class GenericRelationsTests(TestCase):
         self.assertQuerysetEqual(Animal.objects.filter(tags__content_type=ctype), [
             "<Animal: Platypus>"
         ])
+
+    def test_generic_relation_related_name_default(self):
+        # Test that GenericRelation by default isn't usable from
+        # the reverse side.
+        with self.assertRaises(FieldError):
+            TaggedItem.objects.filter(vegetable__isnull=True)
 
     def test_multiple_gfk(self):
         # Simple tests for multiple GenericForeignKeys
@@ -285,6 +303,68 @@ class GenericRelationsTests(TestCase):
             defaults={'content_object': diamond})
         self.assertFalse(created)
         self.assertEqual(tag.content_object.id, diamond.id)
+
+    def test_query_content_type(self):
+        with six.assertRaisesRegex(self, FieldError, "^Cannot resolve keyword 'content_object' into field."):
+            TaggedItem.objects.get(content_object='')
+
+
+class GetOrCreateAndUpdateOrCreateTests(TestCase):
+    """
+    GenericRelationsTests has changed significantly on master, this
+    standalone TestCase is part of the backport for #23611.
+    """
+    def setUp(self):
+        self.bacon = Vegetable.objects.create(name="Bacon", is_yucky=False)
+        self.bacon.tags.create(tag="fatty")
+        self.bacon.tags.create(tag="salty")
+
+    def test_generic_update_or_create_when_created(self):
+        """
+        Should be able to use update_or_create from the generic related manager
+        to create a tag. Refs #23611.
+        """
+        count = self.bacon.tags.count()
+        tag, created = self.bacon.tags.update_or_create(tag='stinky')
+        self.assertTrue(created)
+        self.assertEqual(count + 1, self.bacon.tags.count())
+
+    def test_generic_update_or_create_when_updated(self):
+        """
+        Should be able to use update_or_create from the generic related manager
+        to update a tag. Refs #23611.
+        """
+        count = self.bacon.tags.count()
+        tag = self.bacon.tags.create(tag='stinky')
+        self.assertEqual(count + 1, self.bacon.tags.count())
+        tag, created = self.bacon.tags.update_or_create(defaults={'tag': 'juicy'}, id=tag.id)
+        self.assertFalse(created)
+        self.assertEqual(count + 1, self.bacon.tags.count())
+        self.assertEqual(tag.tag, 'juicy')
+
+    def test_generic_get_or_create_when_created(self):
+        """
+        Should be able to use get_or_create from the generic related manager
+        to create a tag. Refs #23611.
+        """
+        count = self.bacon.tags.count()
+        tag, created = self.bacon.tags.get_or_create(tag='stinky')
+        self.assertTrue(created)
+        self.assertEqual(count + 1, self.bacon.tags.count())
+
+    def test_generic_get_or_create_when_exists(self):
+        """
+        Should be able to use get_or_create from the generic related manager
+        to get a tag. Refs #23611.
+        """
+        count = self.bacon.tags.count()
+        tag = self.bacon.tags.create(tag="stinky")
+        self.assertEqual(count + 1, self.bacon.tags.count())
+        tag, created = self.bacon.tags.get_or_create(id=tag.id, defaults={'tag': 'juicy'})
+        self.assertFalse(created)
+        self.assertEqual(count + 1, self.bacon.tags.count())
+        # shouldn't had changed the tag
+        self.assertEqual(tag.tag, 'stinky')
 
 
 class CustomWidget(forms.TextInput):

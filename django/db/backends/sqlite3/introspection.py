@@ -79,7 +79,11 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
         # Schema for this table
         cursor.execute("SELECT sql FROM sqlite_master WHERE tbl_name = %s AND type = %s", [table_name, "table"])
-        results = cursor.fetchone()[0].strip()
+        try:
+            results = cursor.fetchone()[0].strip()
+        except TypeError:
+            # It might be a view, then no results will be returned
+            return relations
         results = results[results.index('(') + 1:results.rindex(')')]
 
         # Walk through and look for references to other tables. SQLite doesn't
@@ -197,7 +201,10 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
         constraints = {}
         # Get the index info
         cursor.execute("PRAGMA index_list(%s)" % self.connection.ops.quote_name(table_name))
-        for number, index, unique in cursor.fetchall():
+        for row in cursor.fetchall():
+            # Sqlite3 3.8.9+ has 5 columns, however older versions only give 3
+            # columns. Discard last 2 columns if there.
+            number, index, unique = row[:3]
             # Get the index info for that index
             cursor.execute('PRAGMA index_info(%s)' % self.connection.ops.quote_name(index))
             for index_rank, column_rank, column in cursor.fetchall():

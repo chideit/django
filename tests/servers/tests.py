@@ -9,7 +9,7 @@ import socket
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import LiveServerTestCase
-from django.test.utils import override_settings
+from django.test import override_settings
 from django.utils.http import urlencode
 from django.utils.six.moves.urllib.error import HTTPError
 from django.utils.six.moves.urllib.request import urlopen
@@ -140,7 +140,7 @@ class LiveServerViews(LiveServerBase):
     def test_no_collectstatic_emulation(self):
         """
         Test that LiveServerTestCase reports a 404 status code when HTTP client
-        tries to access a static file that isn't explictly put under
+        tries to access a static file that isn't explicitly put under
         STATIC_ROOT.
         """
         try:

@@ -7,8 +7,8 @@ GDAL API
 .. module:: django.contrib.gis.gdal
    :synopsis: GeoDjango's high-level interface to the GDAL library.
 
-`GDAL`__ stands for **G**\ eospatial **D**\ ata **A**\ bstraction **L**\ ibrary,
-and is a veritable "swiss army knife" of GIS data functionality.  A subset
+`GDAL`__ stands for **Geospatial Data Abstraction Library**,
+and is a veritable "Swiss army knife" of GIS data functionality.  A subset
 of GDAL is the `OGR`__ Simple Features Library, which specializes
 in reading and writing vector geographic data in a variety of standard
 formats.
@@ -61,16 +61,21 @@ points, polygons, etc.), as well as the names and types of any
 additional fields (:class:`Field`) of data that may be associated with
 each feature in that layer.
 
-.. class:: DataSource(ds_input)
+.. class:: DataSource(ds_input, [encoding='utf-8'])
 
-   The constructor for ``DataSource`` just a single parameter: the path of
-   the file you want to read.  However, OGR
+   The constructor for ``DataSource`` only requires one parameter: the path of
+   the file you want to read. However, OGR
    also supports a variety of more complex data sources, including
    databases, that may be accessed by passing a special name string instead
    of a path.  For more information, see the `OGR Vector Formats`__
    documentation.  The :attr:`name` property of a ``DataSource``
    instance gives the OGR name of the underlying data source that it is
    using.
+
+   The optional ``encoding`` parameter allows you to
+   specify a non-standard encoding of the strings in the source. This is
+   typically useful when you obtain ``DjangoUnicodeDecodeError`` exceptions
+   while reading field values.
 
    Once you've created your ``DataSource``, you can find out how many
    layers of data it contains by accessing the :attr:`layer_count` property,
@@ -459,19 +464,19 @@ systems and coordinate transformation::
 
    Constructs a :class:`Polygon` from the given bounding-box (a 4-tuple).
 
-   .. method:: __len__
+   .. method:: __len__()
 
    Returns the number of points in a :class:`LineString`, the
    number of rings in a :class:`Polygon`, or the number of geometries in a
    :class:`GeometryCollection`. Not applicable to other geometry types.
 
-   .. method:: __iter__
+   .. method:: __iter__()
 
    Iterates over the points in a :class:`LineString`, the rings in a
    :class:`Polygon`, or the geometries in a :class:`GeometryCollection`.
    Not applicable to other geometry types.
 
-   .. method:: __getitem__
+   .. method:: __getitem__()
 
    Returns the point at the specified index for a :class:`LineString`, the
    interior ring at the specified index for a :class:`Polygon`, or the geometry
@@ -677,7 +682,7 @@ systems and coordinate transformation::
    Returns ``True`` if this geometry overlaps the other, otherwise returns
    ``False``.
 
-   .. method:: boundary
+   .. method:: boundary()
 
    The boundary of this geometry, as a new :class:`OGRGeometry` object.
 
@@ -686,22 +691,22 @@ systems and coordinate transformation::
    The smallest convex polygon that contains this geometry, as a new
    :class:`OGRGeometry` object.
 
-   .. method:: difference
+   .. method:: difference()
 
    Returns the region consisting of the difference of this geometry and
    the other, as a new :class:`OGRGeometry` object.
 
-   .. method:: intersection
+   .. method:: intersection()
 
    Returns the region consisting of the intersection of this geometry and
    the other, as a new :class:`OGRGeometry` object.
 
-   .. method:: sym_difference
+   .. method:: sym_difference()
 
    Returns the region consisting of the symmetric difference of this
    geometry and the other, as a new :class:`OGRGeometry` object.
 
-   .. method:: union
+   .. method:: union()
 
    Returns the region consisting of the union of this geometry and
    the other, as a new :class:`OGRGeometry` object.
@@ -739,7 +744,7 @@ systems and coordinate transformation::
    .. attribute:: z
 
    Returns the Z coordinate of this point, or ``None`` if the
-   the point does not have a Z coordinate::
+   point does not have a Z coordinate::
 
        >>> OGRGeometry('POINT (1 2 3)').z
        3.0
@@ -873,7 +878,7 @@ systems and coordinate transformation::
    A string representing this envelope as a polygon in WKT format.
 
 
-   .. method:: expand_to_include(self, *args)
+   .. method:: expand_to_include(*args)
 
 Coordinate System Objects
 =========================
@@ -1015,7 +1020,7 @@ Coordinate System Objects
    and will automatically determines whether to return the linear
    or angular units.
 
-   .. attribute:: ellisoid
+   .. attribute:: ellipsoid
 
    Returns a tuple of the ellipsoid parameters for this spatial
    reference: (semimajor axis, semiminor axis, and inverse flattening)

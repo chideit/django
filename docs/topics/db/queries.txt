@@ -23,16 +23,14 @@ models, which comprise a Weblog application:
         name = models.CharField(max_length=100)
         tagline = models.TextField()
 
-        # On Python 3: def __str__(self):
-        def __unicode__(self):
+        def __str__(self):              # __unicode__ on Python 2
             return self.name
 
     class Author(models.Model):
         name = models.CharField(max_length=50)
         email = models.EmailField()
 
-        # On Python 3: def __str__(self):
-        def __unicode__(self):
+        def __str__(self):              # __unicode__ on Python 2
             return self.name
 
     class Entry(models.Model):
@@ -46,8 +44,7 @@ models, which comprise a Weblog application:
         n_pingbacks = models.IntegerField()
         rating = models.IntegerField()
 
-        # On Python 3: def __str__(self):
-        def __unicode__(self):
+        def __str__(self):              # __unicode__ on Python 2
             return self.headline
 
 Creating objects
@@ -89,8 +86,8 @@ To save changes to an object that's already in the database, use
 Given a ``Blog`` instance ``b5`` that has already been saved to the database,
 this example changes its name and updates its record in the database::
 
-    >> b5.name = 'New name'
-    >> b5.save()
+    >>> b5.name = 'New name'
+    >>> b5.save()
 
 This performs an ``UPDATE`` SQL statement behind the scenes. Django doesn't hit
 the database until you explicitly call :meth:`~django.db.models.Model.save`.
@@ -131,6 +128,8 @@ go, include multiple arguments in the call to
     >>> entry.authors.add(john, paul, george, ringo)
 
 Django will complain if you try to assign or add an object of the wrong type.
+
+.. _retrieving-objects:
 
 Retrieving objects
 ==================
@@ -250,9 +249,9 @@ stored, used and reused.
 
 Example::
 
-    >> q1 = Entry.objects.filter(headline__startswith="What")
-    >> q2 = q1.exclude(pub_date__gte=datetime.date.today())
-    >> q3 = q1.filter(pub_date__gte=datetime.date.today())
+    >>> q1 = Entry.objects.filter(headline__startswith="What")
+    >>> q2 = q1.exclude(pub_date__gte=datetime.date.today())
+    >>> q3 = q1.filter(pub_date__gte=datetime.date.today())
 
 These three ``QuerySets`` are separate. The first is a base
 :class:`~django.db.models.query.QuerySet` containing all entries that contain a
@@ -393,7 +392,9 @@ Basic lookups keyword arguments take the form ``field__lookuptype=value``.
 
     >>> Entry.objects.filter(pub_date__lte='2006-01-01')
 
-translates (roughly) into the following SQL::
+translates (roughly) into the following SQL:
+
+.. code-block:: sql
 
     SELECT * FROM blog_entry WHERE pub_date <= '2006-01-01';
 
@@ -411,7 +412,7 @@ can specify the field name suffixed with ``_id``. In this case, the value
 parameter is expected to contain the raw value of the foreign model's primary
 key. For example:
 
-    >>> Entry.objects.filter(blog_id__exact=4)
+    >>> Entry.objects.filter(blog_id=4)
 
 If you pass an invalid keyword argument, a lookup function will raise
 ``TypeError``.
@@ -448,8 +449,8 @@ probably use:
 
         >>> Blog.objects.get(name__iexact="beatles blog")
 
-    Would match a ``Blog`` titled "Beatles Blog", "beatles blog", or even
-    "BeAtlES blOG".
+    Would match a ``Blog`` titled ``"Beatles Blog"``, ``"beatles blog"``, or
+    even ``"BeAtlES blOG"``.
 
 :lookup:`contains`
     Case-sensitive containment test. For example::
@@ -489,7 +490,7 @@ want.
 This example retrieves all ``Entry`` objects with a ``Blog`` whose ``name``
 is ``'Beatles Blog'``::
 
-    >>> Entry.objects.filter(blog__name__exact='Beatles Blog')
+    >>> Entry.objects.filter(blog__name='Beatles Blog')
 
 This spanning can be as deep as you'd like.
 
@@ -544,8 +545,7 @@ find entries linked to tags called *"music"* and *"bands"* or we might want an
 entry that contains a tag with a name of *"music"* and a status of *"public"*.
 
 To handle both of these situations, Django has a consistent way of processing
-:meth:`~django.db.models.query.QuerySet.filter` and
-:meth:`~django.db.models.query.QuerySet.exclude` calls. Everything inside a
+:meth:`~django.db.models.query.QuerySet.filter` calls. Everything inside a
 single :meth:`~django.db.models.query.QuerySet.filter` call is applied
 simultaneously to filter out items matching all those requirements. Successive
 :meth:`~django.db.models.query.QuerySet.filter` calls further restrict the set
@@ -579,14 +579,34 @@ that were published in 2008. The entries selected by the second filter may or
 may not be the same as the entries in the first filter. We are filtering the
 ``Blog`` items with each filter statement, not the ``Entry`` items.
 
-All of this behavior also applies to
-:meth:`~django.db.models.query.QuerySet.exclude`: all the conditions in a
-single :meth:`~django.db.models.query.QuerySet.exclude` statement apply to a
-single instance (if those conditions are talking about the same multi-valued
-relation). Conditions in subsequent
-:meth:`~django.db.models.query.QuerySet.filter` or
-:meth:`~django.db.models.query.QuerySet.exclude` calls that refer to the same
-relation may end up filtering on different linked objects.
+.. note::
+
+    The behavior of :meth:`~django.db.models.query.QuerySet.filter` for queries
+    that span multi-value relationships, as described above, is not implemented
+    equivalently for :meth:`~django.db.models.query.QuerySet.exclude`. Instead,
+    the conditions in a single :meth:`~django.db.models.query.QuerySet.exclude`
+    call will not necessarily refer to the same item.
+
+    For example, the following query would exclude blogs that contain *both*
+    entries with *"Lennon"* in the headline *and* entries published in 2008::
+
+        Blog.objects.exclude(
+            entry__headline__contains='Lennon',
+            entry__pub_date__year=2008,
+        )
+
+    However, unlike the behavior when using
+    :meth:`~django.db.models.query.QuerySet.filter`, this will not limit blogs
+    based on entries that satisfy both conditions. In order to do that, i.e.
+    to select all blogs that do not contain entries published with *"Lennon"*
+    that were published in 2008, you need to make two queries::
+
+        Blog.objects.exclude(
+            entry=Entry.objects.filter(
+                headline__contains='Lennon',
+                pub_date__year=2008,
+            ),
+        )
 
 .. _using-f-expressions-in-filters:
 
@@ -1158,11 +1178,19 @@ query you can use the following syntax::
 
     class Entry(models.Model):
         #...
-        objects = models.Manager() # Default Manager
-        entries = EntryManager() # Custom Manager
+        objects = models.Manager()  # Default Manager
+        entries = EntryManager()    # Custom Manager
 
-    >>> b = Blog.objects.get(id=1)
-    >>> b.entry_set(manager='entries').all()
+    b = Blog.objects.get(id=1)
+    b.entry_set(manager='entries').all()
+
+If ``EntryManager`` performed default filtering in its ``get_queryset()``
+method, that filtering would apply to the ``all()`` call.
+
+Of course, specifying a custom reverse manager also enables you to call its
+custom methods::
+
+    b.entry_set(manager='entries').is_published()
 
 Additional methods to handle related objects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1280,11 +1308,16 @@ relationship on one end.
 But how is this possible, given that a model class doesn't know which other
 model classes are related to it until those other model classes are loaded?
 
-The answer lies in the :setting:`INSTALLED_APPS` setting. The first time any
-model is loaded, Django iterates over every model in :setting:`INSTALLED_APPS`
-and creates the backward relationships in memory as needed. Essentially, one of
-the functions of :setting:`INSTALLED_APPS` is to tell Django the entire model
-domain.
+The answer lies in the :data:`app registry <django.apps.apps>`. When Django
+starts, it imports each application listed in :setting:`INSTALLED_APPS`, and
+then the ``models`` module inside each application. Whenever a new model class
+is created, Django adds backward-relationships to any related models. If the
+related models haven't been imported yet, Django keeps tracks of the
+relationships and adds them when the related models eventually are imported.
+
+For this reason, it's particularly important that all the models you're using
+be defined in applications listed in :setting:`INSTALLED_APPS`. Otherwise,
+backwards relations may not work properly.
 
 Queries over related objects
 ----------------------------

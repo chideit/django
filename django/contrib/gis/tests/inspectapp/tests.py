@@ -29,8 +29,12 @@ class InspectDbTests(TestCase):
                  table_name_filter=lambda tn: tn.startswith('inspectapp_'),
                  stdout=out)
         output = out.getvalue()
-        self.assertIn('geom = models.PolygonField()', output)
-        self.assertIn('point = models.PointField()', output)
+        if not connections['default'].ops.oracle:
+            self.assertIn('geom = models.PolygonField()', output)
+            self.assertIn('point = models.PointField()', output)
+        else:
+            self.assertIn('geom = models.GeometryField(', output)
+            self.assertIn('point = models.GeometryField(', output)
         self.assertIn('objects = models.GeoManager()', output)
 
 
@@ -76,7 +80,7 @@ class OGRInspectTest(TestCase):
         self.assertEqual(model_def, '\n'.join(expected))
 
     def test_time_field(self):
-        # Only possible to test this on PostGIS at the momemnt.  MySQL
+        # Only possible to test this on PostGIS at the moment.  MySQL
         # complains about permissions, and SpatiaLite/Oracle are
         # insanely difficult to get support compiled in for in GDAL.
         if not connections['default'].ops.postgis:
@@ -114,6 +118,13 @@ class OGRInspectTest(TestCase):
             '    geom = models.PolygonField()\n'
             '    objects = models.GeoManager()'
         ))
+
+    def test_management_command(self):
+        shp_file = os.path.join(TEST_DATA, 'cities', 'cities.shp')
+        out = StringIO()
+        call_command('ogrinspect', shp_file, 'City', stdout=out)
+        output = out.getvalue()
+        self.assertIn('class City(models.Model):', output)
 
 
 def get_ogr_db_string():

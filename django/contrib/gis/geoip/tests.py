@@ -25,7 +25,7 @@ if HAS_GEOS:
 
 
 @skipUnless(HAS_GEOIP and getattr(settings, "GEOIP_PATH", None),
-    "GeoIP is required along with the GEOIP_DATA setting.")
+    "GeoIP is required along with the GEOIP_PATH setting.")
 class GeoIPTest(unittest.TestCase):
 
     def test01_init(self):
@@ -119,3 +119,5 @@ class GeoIPTest(unittest.TestCase):
         g = GeoIP()
         d = g.city("www.osnabrueck.de")
         self.assertEqual('Osnabrück', d['city'])
+        d = g.country('200.7.49.81')
+        self.assertEqual('Curaçao', d['country_name'])

@@ -3,10 +3,12 @@
 from __future__ import unicode_literals
 
 import re
+import warnings
 
-from django.utils.safestring import SafeData, mark_safe
+from django.utils.deprecation import RemovedInDjango18Warning
 from django.utils.encoding import force_text, force_str
 from django.utils.functional import allow_lazy
+from django.utils.safestring import SafeData, mark_safe
 from django.utils import six
 from django.utils.six.moves.urllib.parse import quote, unquote, urlsplit, urlunsplit
 from django.utils.text import normalize_newlines
@@ -34,7 +36,12 @@ trailing_empty_content_re = re.compile(r'(?:<p>(?:&nbsp;|\s|<br \/>)*?</p>\s*)+\
 
 def escape(text):
     """
-    Returns the given text with ampersands, quotes and angle brackets encoded for use in HTML.
+    Returns the given text with ampersands, quotes and angle brackets encoded
+    for use in HTML.
+
+    This function always escapes its input, even if it's already escaped and
+    marked as such. This may result in double-escaping. If this is a concern,
+    use conditional_escape() instead.
     """
     return mark_safe(force_text(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;'))
 escape = allow_lazy(escape, six.text_type)
@@ -66,6 +73,9 @@ escapejs = allow_lazy(escapejs, six.text_type)
 def conditional_escape(text):
     """
     Similar to escape(), except that it doesn't operate on pre-escaped strings.
+
+    This function relies on the __html__ convention used both by Django's
+    SafeData class and by third-party libraries like markupsafe.
     """
     if hasattr(text, '__html__'):
         return text.__html__()
@@ -80,8 +90,7 @@ def format_html(format_string, *args, **kwargs):
     of str.format or % interpolation to build up small HTML fragments.
     """
     args_safe = map(conditional_escape, args)
-    kwargs_safe = dict((k, conditional_escape(v)) for (k, v) in
-                        six.iteritems(kwargs))
+    kwargs_safe = dict((k, conditional_escape(v)) for (k, v) in six.iteritems(kwargs))
     return mark_safe(format_string.format(*args_safe, **kwargs_safe))
 
 
@@ -119,7 +128,10 @@ linebreaks = allow_lazy(linebreaks, six.text_type)
 
 class MLStripper(HTMLParser):
     def __init__(self):
-        HTMLParser.__init__(self)
+        if six.PY2:
+            HTMLParser.__init__(self)
+        else:
+            HTMLParser.__init__(self, strict=False)
         self.reset()
         self.fed = []
 
@@ -136,16 +148,38 @@ class MLStripper(HTMLParser):
         return ''.join(self.fed)
 
 
-def strip_tags(value):
-    """Returns the given HTML with all tags stripped."""
+def _strip_once(value):
+    """
+    Internal tag stripping utility used by strip_tags.
+    """
     s = MLStripper()
     try:
         s.feed(value)
-        s.close()
     except HTMLParseError:
         return value
+    try:
+        s.close()
+    except (HTMLParseError, UnboundLocalError):
+        # UnboundLocalError because of http://bugs.python.org/issue17802
+        # on Python 3.2, triggered by strict=False mode of HTMLParser
+        return s.get_data() + s.rawdata
     else:
         return s.get_data()
+
+
+def strip_tags(value):
+    """Returns the given HTML with all tags stripped."""
+    # Note: in typical case this loop executes _strip_once once. Loop condition
+    # is redundant, but helps to reduce number of executions of _strip_once.
+    while '<' in value and '>' in value:
+        new_value = _strip_once(value)
+        if len(new_value) >= len(value):
+            # _strip_once was not able to detect more tags or length increased
+            # due to http://bugs.python.org/issue20288
+            # (affects Python 2 < 2.7.7 and Python 3 < 3.3.5)
+            break
+        value = new_value
+    return value
 strip_tags = allow_lazy(strip_tags)
 
 
@@ -175,6 +209,9 @@ strip_entities = allow_lazy(strip_entities, six.text_type)
 
 def fix_ampersands(value):
     """Returns the given HTML with all unencoded ampersands encoded correctly."""
+    # As fix_ampersands is wrapped in allow_lazy, stacklevel 3 is more useful than 2.
+    warnings.warn("The fix_ampersands function is deprecated and will be removed in Django 1.8.",
+                  RemovedInDjango18Warning, stacklevel=3)
     return unencoded_ampersands_re.sub('&amp;', force_text(value))
 fix_ampersands = allow_lazy(fix_ampersands, six.text_type)
 
@@ -210,13 +247,13 @@ def urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):
     Links can have trailing punctuation (periods, commas, close-parens) and
     leading punctuation (opening parens) and it'll still do the right thing.
 
-    If trim_url_limit is not None, the URLs in link text longer than this limit
-    will truncated to trim_url_limit-3 characters and appended with an elipsis.
+    If trim_url_limit is not None, the URLs in the link text longer than this
+    limit will be truncated to trim_url_limit-3 characters and appended with
+    an ellipsis.
 
-    If nofollow is True, the URLs in link text will get a rel="nofollow"
-    attribute.
+    If nofollow is True, the links will get a rel="nofollow" attribute.
 
-    If autoescape is True, the link text and URLs will get autoescaped.
+    If autoescape is True, the link text and URLs will be autoescaped.
     """
     def trim_url(x, limit=trim_url_limit):
         if limit is None or len(x) <= limit:
@@ -238,7 +275,7 @@ def urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):
                     lead = lead + opening
                 # Keep parentheses at the end only if they're balanced.
                 if (middle.endswith(closing)
-                    and middle.count(closing) == middle.count(opening) + 1):
+                        and middle.count(closing) == middle.count(opening) + 1):
                     middle = middle[:-len(closing)]
                     trail = closing + trail
 
@@ -249,7 +286,7 @@ def urlize(text, trim_url_limit=None, nofollow=False, autoescape=False):
                 url = smart_urlquote(middle)
             elif simple_url_2_re.match(middle):
                 url = smart_urlquote('http://%s' % middle)
-            elif not ':' in middle and simple_email_re.match(middle):
+            elif ':' not in middle and simple_email_re.match(middle):
                 local, domain = middle.rsplit('@', 1)
                 try:
                     domain = domain.encode('idna').decode('ascii')
@@ -291,8 +328,10 @@ def clean_html(text):
         * Remove stuff like "<p>&nbsp;&nbsp;</p>", but only if it's at the
           bottom of the text.
     """
-    from django.utils.text import normalize_newlines
-    text = normalize_newlines(force_text(text))
+    # As clean_html is wrapped in allow_lazy, stacklevel 3 is more useful than 2.
+    warnings.warn("The clean_html function is deprecated and will be removed in Django 1.8.",
+                  RemovedInDjango18Warning, stacklevel=3)
+    text = normalize_newlines(text)
     text = re.sub(r'<(/?)\s*b\s*>', '<\\1strong>', text)
     text = re.sub(r'<(/?)\s*i\s*>', '<\\1em>', text)
     text = fix_ampersands(text)

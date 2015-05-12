@@ -5,12 +5,8 @@ import os
 import re
 import sys
 from io import BytesIO
+from itertools import chain
 from pprint import pformat
-try:
-    from urllib.parse import parse_qsl, urlencode, quote, urljoin
-except ImportError:
-    from urllib import urlencode, quote
-    from urlparse import parse_qsl, urljoin
 
 from django.conf import settings
 from django.core import signing
@@ -20,6 +16,7 @@ from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from django.utils import six
 from django.utils.datastructures import MultiValueDict, ImmutableList
 from django.utils.encoding import force_bytes, force_text, force_str, iri_to_uri
+from django.utils.six.moves.urllib.parse import parse_qsl, urlencode, quote, urljoin
 
 
 RAISE_ERROR = object()
@@ -66,7 +63,7 @@ class HttpRequest(object):
         """Returns the HTTP host using the environment or request headers."""
         # We try three options, in order of decreasing preference.
         if settings.USE_X_FORWARDED_HOST and (
-            'HTTP_X_FORWARDED_HOST' in self.META):
+                'HTTP_X_FORWARDED_HOST' in self.META):
             host = self.META['HTTP_X_FORWARDED_HOST']
         elif 'HTTP_HOST' in self.META:
             host = self.META['HTTP_HOST']
@@ -87,9 +84,9 @@ class HttpRequest(object):
         else:
             msg = "Invalid HTTP_HOST header: %r." % host
             if domain:
-                msg += "You may need to add %r to ALLOWED_HOSTS." % domain
+                msg += " You may need to add %r to ALLOWED_HOSTS." % domain
             else:
-                msg += "The domain name provided is not valid according to RFC 1034/1035"
+                msg += " The domain name provided is not valid according to RFC 1034/1035."
             raise DisallowedHost(msg)
 
     def get_full_path(self):
@@ -235,11 +232,11 @@ class HttpRequest(object):
             try:
                 self._post, self._files = self.parse_file_upload(self.META, data)
             except MultiPartParserError:
-                # An error occured while parsing POST data. Since when
+                # An error occurred while parsing POST data. Since when
                 # formatting the error the request handler might access
                 # self.POST, set self._post and self._file to prevent
                 # attempts to parse POST data again.
-                # Mark that an error occured. This allows self.__repr__ to
+                # Mark that an error occurred. This allows self.__repr__ to
                 # be explicit about it instead of simply representing an
                 # empty POST
                 self._mark_post_parse_error()
@@ -248,6 +245,11 @@ class HttpRequest(object):
             self._post, self._files = QueryDict(self.body, encoding=self._encoding), MultiValueDict()
         else:
             self._post, self._files = QueryDict('', encoding=self._encoding), MultiValueDict()
+
+    def close(self):
+        if hasattr(self, '_files'):
+            for f in chain.from_iterable(l[1] for l in self._files.lists()):
+                f.close()
 
     # File-like and iterator interface.
     #
@@ -286,12 +288,19 @@ class HttpRequest(object):
 
 class QueryDict(MultiValueDict):
     """
-    A specialized MultiValueDict that takes a query string when initialized.
-    This is immutable unless you create a copy of it.
+    A specialized MultiValueDict which represents a query string.
 
-    Values retrieved from this class are converted from the given encoding
+    A QueryDict can be used to represent GET or POST data. It subclasses
+    MultiValueDict since keys in such data can be repeated, for instance
+    in the data from a form with a <select multiple> field.
+
+    By default QueryDicts are immutable, though the copy() method
+    will always return a mutable copy.
+
+    Both keys and values set on this class are converted from the given encoding
     (DEFAULT_CHARSET by default) to unicode.
     """
+
     # These are both reset in __init__, but is specified here at the class
     # level so that unpickling will have valid values
     _mutable = True
@@ -304,8 +313,12 @@ class QueryDict(MultiValueDict):
         self.encoding = encoding
         if six.PY3:
             if isinstance(query_string, bytes):
-                # query_string contains URL-encoded data, a subset of ASCII.
-                query_string = query_string.decode()
+                # query_string normally contains URL-encoded data, a subset of ASCII.
+                try:
+                    query_string = query_string.decode(encoding)
+                except UnicodeDecodeError:
+                    # ... but some user agents are misbehaving :-(
+                    query_string = query_string.decode('iso-8859-1')
             for key, value in parse_qsl(query_string or '',
                                         keep_blank_values=True,
                                         encoding=encoding):
@@ -313,8 +326,12 @@ class QueryDict(MultiValueDict):
         else:
             for key, value in parse_qsl(query_string or '',
                                         keep_blank_values=True):
+                try:
+                    value = value.decode(encoding)
+                except UnicodeDecodeError:
+                    value = value.decode('iso-8859-1')
                 self.appendlist(force_text(key, encoding, errors='replace'),
-                                force_text(value, encoding, errors='replace'))
+                                value)
         self._mutable = mutable
 
     @property

@@ -179,6 +179,17 @@ of the ``annotate()`` clause is a ``QuerySet``; this ``QuerySet`` can be
 modified using any other ``QuerySet`` operation, including ``filter()``,
 ``order_by()``, or even additional calls to ``annotate()``.
 
+.. admonition:: If in doubt, inspect the SQL query!
+
+    In order to understand what happens in your query, consider inspecting the
+    ``query`` property of your ``QuerySet``.
+
+    For instance, combining multiple aggregations with ``annotate()`` will
+    yield the wrong results, as `multiple tables are cross joined`_,
+    resulting in duplicate row aggregations.
+
+.. _multiple tables are cross joined: https://code.djangoproject.com/ticket/10060
+
 Joins and aggregates
 ====================
 
@@ -241,7 +252,7 @@ such alias were specified, it would be the rather long ``'book__pubdate__min'``.
 
 This doesn't apply just to foreign keys. It also works with many-to-many
 relations. For example, we can ask for every author, annotated with the total
-number of pages considering all the books he/she has (co-)authored (note how we
+number of pages considering all the books the author has (co-)authored (note how we
 use ``'book'`` to specify the ``Author`` -> ``Book`` reverse many-to-many hop)::
 
     >>> Author.objects.annotate(total_pages=Sum('book__pages'))

@@ -4,7 +4,7 @@ import time
 
 from django.core import signing
 from django.http import HttpRequest, HttpResponse
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 
 class SignedCookieTest(TestCase):
@@ -37,7 +37,7 @@ class SignedCookieTest(TestCase):
         self.assertRaises(signing.BadSignature,
             request.get_signed_cookie, 'c')
 
-    def test_default_argument_supresses_exceptions(self):
+    def test_default_argument_suppresses_exceptions(self):
         response = HttpResponse()
         response.set_signed_cookie('c', 'hello')
         request = HttpRequest()
@@ -62,3 +62,12 @@ class SignedCookieTest(TestCase):
                 request.get_signed_cookie, 'c', max_age=10)
         finally:
             time.time = _time
+
+    @override_settings(SECRET_KEY=b'\xe7')
+    def test_signed_cookies_with_binary_key(self):
+        response = HttpResponse()
+        response.set_signed_cookie('c', 'hello')
+
+        request = HttpRequest()
+        request.COOKIES['c'] = response.cookies['c'].value
+        self.assertEqual(request.get_signed_cookie('c'), 'hello')

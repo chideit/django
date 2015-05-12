@@ -84,7 +84,7 @@ model will be serialized. For example, consider the following models::
         name = models.CharField(max_length=50)
 
     class Restaurant(Place):
-        serves_hot_dogs = models.BooleanField()
+        serves_hot_dogs = models.BooleanField(default=False)
 
 If you only serialize the Restaurant model::
 
@@ -215,6 +215,8 @@ the auth.User model has such a relation to the auth.Permission model::
     </object>
 
 This example links the given user with the permission models with PKs 46 and 47.
+
+.. _serialization-formats-json:
 
 JSON
 ~~~~
@@ -480,12 +482,12 @@ line flags to generate natural keys.
 
 .. versionchanged:: 1.7
 
-Previously there was only a ``use_natural_keys`` argument for
-``serializers.serialize()`` and the `-n` or `--natural` command line flags.
-These have been deprecated in favor of the ``use_natural_foreign_keys`` and
-``use_natural_primary_keys`` arguments and the corresponding
-:djadminopt:`--natural-foreign` and :djadminopt:`--natural-primary` options
-for :djadmin:`dumpdata`.
+    Previously there was only a ``use_natural_keys`` argument for
+    ``serializers.serialize()`` and the `-n` or `--natural` command line flags.
+    These have been deprecated in favor of the ``use_natural_foreign_keys`` and
+    ``use_natural_primary_keys`` arguments and the corresponding
+    :djadminopt:`--natural-foreign` and :djadminopt:`--natural-primary` options
+    for :djadmin:`dumpdata`.
 
 The original argument and command line flags remain for backwards
 compatibility and map to the new ``use_natural_foreign_keys`` argument and

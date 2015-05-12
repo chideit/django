@@ -5,12 +5,12 @@ import calendar
 import datetime
 import re
 import sys
-
+import unicodedata
 from binascii import Error as BinasciiError
 from email.utils import formatdate
 
 from django.utils.datastructures import MultiValueDict
-from django.utils.encoding import force_str, force_text
+from django.utils.encoding import force_bytes, force_str, force_text
 from django.utils.functional import allow_lazy
 from django.utils import six
 from django.utils.six.moves.urllib.parse import (
@@ -224,7 +224,7 @@ def urlsafe_base64_decode(s):
     Decodes a base64 encoded string, adding back any trailing equal signs that
     might have been stripped.
     """
-    s = s.encode('utf-8')  # base64encode should only return ASCII.
+    s = force_bytes(s)
     try:
         return base64.urlsafe_b64decode(s.ljust(len(s) + len(s) % 4, b'='))
     except (LookupError, BinasciiError) as e:
@@ -270,8 +270,27 @@ def is_safe_url(url, host=None):
 
     Always returns ``False`` on an empty url.
     """
+    if url is not None:
+        url = url.strip()
     if not url:
         return False
+    # Chrome treats \ completely as /
+    url = url.replace('\\', '/')
+    # Chrome considers any URL with more than two slashes to be absolute, but
+    # urlparse is not so flexible. Treat any url with three slashes as unsafe.
+    if url.startswith('///'):
+        return False
     url_info = urlparse(url)
+    # Forbid URLs like http:///example.com - with a scheme, but without a hostname.
+    # In that URL, example.com is not the hostname but, a path component. However,
+    # Chrome will still consider example.com to be the hostname, so we must not
+    # allow this syntax.
+    if not url_info.netloc and url_info.scheme:
+        return False
+    # Forbid URLs that start with control characters. Some browsers (like
+    # Chrome) ignore quite a few control characters at the start of a
+    # URL and might consider the URL as scheme relative.
+    if unicodedata.category(url[0])[0] == 'C':
+        return False
     return ((not url_info.netloc or url_info.netloc == host) and
             (not url_info.scheme or url_info.scheme in ['http', 'https']))

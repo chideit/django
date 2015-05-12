@@ -1,5 +1,6 @@
 import datetime
 import time
+import warnings
 
 try:
     from django.utils.six.moves import _thread as thread
@@ -10,11 +11,13 @@ from contextlib import contextmanager
 from importlib import import_module
 
 from django.conf import settings
+from django.core import checks
 from django.db import DEFAULT_DB_ALIAS
 from django.db.backends.signals import connection_created
 from django.db.backends import utils
 from django.db.transaction import TransactionManagementError
 from django.db.utils import DatabaseError, DatabaseErrorWrapper, ProgrammingError
+from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils.functional import cached_property
 from django.utils import six
 from django.utils import timezone
@@ -36,7 +39,7 @@ class BaseDatabaseWrapper(object):
         self.queries = []
         self.settings_dict = settings_dict
         self.alias = alias
-        self.use_debug_cursor = None
+        self.use_debug_cursor = False
 
         # Savepoint management related attributes
         self.savepoint_state = 0
@@ -61,6 +64,7 @@ class BaseDatabaseWrapper(object):
 
         # Connection termination related attributes
         self.close_at = None
+        self.closed_in_transaction = False
         self.errors_occurred = False
 
         # Thread-safety related attributes
@@ -77,6 +81,10 @@ class BaseDatabaseWrapper(object):
 
     def __hash__(self):
         return hash(self.alias)
+
+    @property
+    def queries_logged(self):
+        return self.use_debug_cursor or settings.DEBUG
 
     ##### Backend-specific methods for creating connections and cursors #####
 
@@ -103,16 +111,17 @@ class BaseDatabaseWrapper(object):
         # In case the previous connection was closed while in an atomic block
         self.in_atomic_block = False
         self.savepoint_ids = []
+        self.needs_rollback = False
         # Reset parameters defining when to close the connection
         max_age = self.settings_dict['CONN_MAX_AGE']
         self.close_at = None if max_age is None else time.time() + max_age
+        self.closed_in_transaction = False
         self.errors_occurred = False
         # Establish the connection
         conn_params = self.get_connection_params()
         self.connection = self.get_new_connection(conn_params)
+        self.set_autocommit(self.settings_dict['AUTOCOMMIT'])
         self.init_connection_state()
-        if self.settings_dict['AUTOCOMMIT']:
-            self.set_autocommit(True)
         connection_created.send(sender=self.__class__, connection=self)
 
     def ensure_connection(self):
@@ -152,8 +161,7 @@ class BaseDatabaseWrapper(object):
         Creates a cursor, opening a connection if necessary.
         """
         self.validate_thread_sharing()
-        if (self.use_debug_cursor or
-            (self.use_debug_cursor is None and settings.DEBUG)):
+        if self.queries_logged:
             cursor = self.make_debug_cursor(self._cursor())
         else:
             cursor = utils.CursorWrapper(self._cursor(), self)
@@ -167,6 +175,8 @@ class BaseDatabaseWrapper(object):
         self.validate_no_atomic_block()
         self._commit()
         self.set_clean()
+        # A successful commit means that the database connection works.
+        self.errors_occurred = False
 
     def rollback(self):
         """
@@ -176,6 +186,8 @@ class BaseDatabaseWrapper(object):
         self.validate_no_atomic_block()
         self._rollback()
         self.set_clean()
+        # A successful rollback means that the database connection works.
+        self.errors_occurred = False
 
     def close(self):
         """
@@ -185,22 +197,31 @@ class BaseDatabaseWrapper(object):
         # Don't call validate_no_atomic_block() to avoid making it difficult
         # to get rid of a connection in an invalid state. The next connect()
         # will reset the transaction state anyway.
+        if self.closed_in_transaction or self.connection is None:
+            return
         try:
             self._close()
         finally:
-            self.connection = None
+            if self.in_atomic_block:
+                self.closed_in_transaction = True
+                self.needs_rollback = True
+            else:
+                self.connection = None
         self.set_clean()
 
     ##### Backend-specific savepoint management methods #####
 
     def _savepoint(self, sid):
-        self.cursor().execute(self.ops.savepoint_create_sql(sid))
+        with self.cursor() as cursor:
+            cursor.execute(self.ops.savepoint_create_sql(sid))
 
     def _savepoint_rollback(self, sid):
-        self.cursor().execute(self.ops.savepoint_rollback_sql(sid))
+        with self.cursor() as cursor:
+            cursor.execute(self.ops.savepoint_rollback_sql(sid))
 
     def _savepoint_commit(self, sid):
-        self.cursor().execute(self.ops.savepoint_commit_sql(sid))
+        with self.cursor() as cursor:
+            cursor.execute(self.ops.savepoint_commit_sql(sid))
 
     def _savepoint_allowed(self):
         # Savepoints cannot be created outside a transaction
@@ -275,7 +296,7 @@ class BaseDatabaseWrapper(object):
         when no current block is running).
 
         If you switch off transaction management and there is a pending
-        commit/rollback, the data will be commited, unless "forced" is True.
+        commit/rollback, the data will be committed, unless "forced" is True.
         """
         self.validate_no_atomic_block()
 
@@ -442,9 +463,14 @@ class BaseDatabaseWrapper(object):
     def is_usable(self):
         """
         Tests if the database connection is usable.
+
         This function may assume that self.connection is not None.
+
+        Actual implementations should take care not to raise exceptions
+        as that may prevent Django from recycling unusable connections.
         """
-        raise NotImplementedError('subclasses of BaseDatabaseWrapper may require an is_usable() method')
+        raise NotImplementedError(
+            "subclasses of BaseDatabaseWrapper may require an is_usable() method")
 
     def close_if_unusable_or_obsolete(self):
         """
@@ -458,6 +484,8 @@ class BaseDatabaseWrapper(object):
                 self.close()
                 return
 
+            # If an exception other than DataError or IntegrityError occurred
+            # since the last commit / rollback, check if the connection works.
             if self.errors_occurred:
                 if self.is_usable():
                     self.errors_occurred = False
@@ -542,9 +570,14 @@ class BaseDatabaseFeatures(object):
     # Does the backend distinguish between '' and None?
     interprets_empty_strings_as_nulls = False
 
+    # Does the backend allow inserting duplicate NULL rows in a nullable
+    # unique field? All core backends implement this correctly, but other
+    # databases such as SQL Server do not.
+    supports_nullable_unique_constraints = True
+
     # Does the backend allow inserting duplicate rows when a unique_together
-    # constraint exists, but one of the unique_together columns is NULL?
-    ignores_nulls_in_unique_constraints = True
+    # constraint exists and some fields are nullable but not all of them?
+    supports_partially_nullable_unique_constraints = True
 
     can_use_chunked_reads = True
     can_return_id_from_insert = False
@@ -585,6 +618,8 @@ class BaseDatabaseFeatures(object):
     supports_subqueries_in_group_by = True
     supports_bitwise_or = True
 
+    supports_binary_field = True
+
     # Do time/datetime fields have microsecond precision?
     supports_microsecond_precision = True
 
@@ -610,8 +645,8 @@ class BaseDatabaseFeatures(object):
     # Is there a 1000 item limit on query parameters?
     supports_1000_query_parameters = True
 
-    # Can an object have a primary key of 0? MySQL says No.
-    allows_primary_key_0 = True
+    # Can an object have an autoincrement primary key of 0? MySQL says No.
+    allows_auto_pk_0 = True
 
     # Do we need to NULL a ForeignKey out, or can the constraint check be
     # deferred
@@ -627,6 +662,16 @@ class BaseDatabaseFeatures(object):
     # Does the backend reset sequences between tests?
     supports_sequence_reset = True
 
+    # Can the backend determine reliably the length of a CharField?
+    can_introspect_max_length = True
+
+    # Can the backend determine reliably if a field is nullable?
+    # Note that this is separate from interprets_empty_strings_as_nulls,
+    # although the latter feature, when true, interferes with correct
+    # setting (and introspection) of CharFields' nullability.
+    # This is True for all core backends.
+    can_introspect_null = True
+
     # Confirm support for introspected foreign keys
     # Every database can do this reliably, except MySQL,
     # which can't do it for MyISAM tables
@@ -634,6 +679,30 @@ class BaseDatabaseFeatures(object):
 
     # Can the backend introspect an AutoField, instead of an IntegerField?
     can_introspect_autofield = False
+
+    # Can the backend introspect a BigIntegerField, instead of an IntegerField?
+    can_introspect_big_integer_field = True
+
+    # Can the backend introspect an BinaryField, instead of an TextField?
+    can_introspect_binary_field = True
+
+    # Can the backend introspect an BooleanField, instead of an IntegerField?
+    can_introspect_boolean_field = True
+
+    # Can the backend introspect an DecimalField, instead of an FloatField?
+    can_introspect_decimal_field = True
+
+    # Can the backend introspect an IPAddressField, instead of an CharField?
+    can_introspect_ip_address_field = False
+
+    # Can the backend introspect a PositiveIntegerField, instead of an IntegerField?
+    can_introspect_positive_integer_field = False
+
+    # Can the backend introspect a SmallIntegerField, instead of an IntegerField?
+    can_introspect_small_integer_field = False
+
+    # Can the backend introspect a TimeField, instead of a DateTimeField?
+    can_introspect_time_field = True
 
     # Support for the DISTINCT ON clause
     can_distinct_on_fields = False
@@ -651,21 +720,18 @@ class BaseDatabaseFeatures(object):
     # Can we issue more than one ALTER COLUMN clause in an ALTER TABLE?
     supports_combined_alters = False
 
-    # What's the maximum length for index names?
-    max_index_name_length = 63
-
     # Does it support foreign keys?
     supports_foreign_keys = True
 
     # Does it support CHECK constraints?
-    supports_check_constraints = True
+    supports_column_check_constraints = True
 
     # Does the backend support 'pyformat' style ("... %(name)s ...", {'name': value})
     # parameter passing? Note this can be provided by the backend even if not
     # supported by the Python driver
     supports_paramstyle_pyformat = True
 
-    # Does the backend require literal defaults, rather than parameterised ones?
+    # Does the backend require literal defaults, rather than parameterized ones?
     requires_literal_defaults = False
 
     # Does the backend require a connection reset after each material schema change?
@@ -673,6 +739,24 @@ class BaseDatabaseFeatures(object):
 
     # What kind of error does the backend throw when accessing closed cursor?
     closed_cursor_error_class = ProgrammingError
+
+    # Does 'a' LIKE 'A' match?
+    has_case_insensitive_like = True
+
+    # Does the backend require the sqlparse library for splitting multi-line
+    # statements before executing them?
+    requires_sqlparse_for_splitting = True
+
+    # Suffix for backends that don't support "SELECT xxx;" queries.
+    bare_select_suffix = ''
+
+    # If NULL is implied on columns without needing to be explicitly specified
+    implied_column_null = False
+
+    uppercases_column_names = False
+
+    # Does the backend support "select for update" queries with limit (and offset)?
+    supports_select_for_update_with_limit = True
 
     def __init__(self, connection):
         self.connection = connection
@@ -685,15 +769,15 @@ class BaseDatabaseFeatures(object):
             # otherwise autocommit will cause the confimation to
             # fail.
             self.connection.enter_transaction_management()
-            cursor = self.connection.cursor()
-            cursor.execute('CREATE TABLE ROLLBACK_TEST (X INT)')
-            self.connection.commit()
-            cursor.execute('INSERT INTO ROLLBACK_TEST (X) VALUES (8)')
-            self.connection.rollback()
-            cursor.execute('SELECT COUNT(X) FROM ROLLBACK_TEST')
-            count, = cursor.fetchone()
-            cursor.execute('DROP TABLE ROLLBACK_TEST')
-            self.connection.commit()
+            with self.connection.cursor() as cursor:
+                cursor.execute('CREATE TABLE ROLLBACK_TEST (X INT)')
+                self.connection.commit()
+                cursor.execute('INSERT INTO ROLLBACK_TEST (X) VALUES (8)')
+                self.connection.rollback()
+                cursor.execute('SELECT COUNT(X) FROM ROLLBACK_TEST')
+                count, = cursor.fetchone()
+                cursor.execute('DROP TABLE ROLLBACK_TEST')
+                self.connection.commit()
         finally:
             self.connection.leave_transaction_management()
         return count == 0
@@ -718,6 +802,16 @@ class BaseDatabaseOperations(object):
     row.
     """
     compiler_module = "django.db.models.sql.compiler"
+
+    # Integer field safe ranges by `internal_type` as documented
+    # in docs/ref/models/fields.txt.
+    integer_field_ranges = {
+        'SmallIntegerField': (-32768, 32767),
+        'IntegerField': (-2147483648, 2147483647),
+        'BigIntegerField': (-9223372036854775808, 9223372036854775807),
+        'PositiveSmallIntegerField': (0, 32767),
+        'PositiveIntegerField': (0, 2147483647),
+    }
 
     def __init__(self, connection):
         self.connection = connection
@@ -939,6 +1033,34 @@ class BaseDatabaseOperations(object):
         """
         return 'DEFAULT'
 
+    def prepare_sql_script(self, sql, _allow_fallback=False):
+        """
+        Takes a SQL script that may contain multiple lines and returns a list
+        of statements to feed to successive cursor.execute() calls.
+
+        Since few databases are able to process raw SQL scripts in a single
+        cursor.execute() call and PEP 249 doesn't talk about this use case,
+        the default implementation is conservative.
+        """
+        # Remove _allow_fallback and keep only 'return ...' in Django 1.9.
+        try:
+            # This import must stay inside the method because it's optional.
+            import sqlparse
+        except ImportError:
+            if _allow_fallback:
+                # Without sqlparse, fall back to the legacy (and buggy) logic.
+                warnings.warn(
+                    "Providing initial SQL data on a %s database will require "
+                    "sqlparse in Django 1.9." % self.connection.vendor,
+                    RemovedInDjango19Warning)
+                from django.core.management.sql import _split_statements
+                return _split_statements(sql)
+            else:
+                raise
+        else:
+            return [sqlparse.format(statement, strip_comments=True)
+                    for statement in sqlparse.split(sql) if statement]
+
     def process_clob(self, value):
         """
         Returns the value of a CLOB column, for backends that return a locator
@@ -971,15 +1093,6 @@ class BaseDatabaseOperations(object):
         not quote the given name if it's already been quoted.
         """
         raise NotImplementedError('subclasses of BaseDatabaseOperations may require a quote_name() method')
-
-    def quote_parameter(self, value):
-        """
-        Returns a quoted version of the value so it's safe to use in an SQL
-        string. This should NOT be used to prepare SQL statements to send to
-        the database; it is meant for outputting SQL statements to a file
-        or the console for later execution by a developer/DBA.
-        """
-        raise NotImplementedError()
 
     def random_function_sql(self):
         """
@@ -1212,11 +1325,18 @@ class BaseDatabaseOperations(object):
         """
         return params
 
+    def integer_field_range(self, internal_type):
+        """
+        Given an integer field internal type (e.g. 'PositiveIntegerField'),
+        returns a tuple of the (min_value, max_value) form representing the
+        range of the column type bound to the field.
+        """
+        return self.integer_field_ranges[internal_type]
+
 
 # Structure returned by the DB-API cursor.description interface (PEP 249)
 FieldInfo = namedtuple('FieldInfo',
-    'name type_code display_size internal_size precision scale null_ok'
-)
+    'name type_code display_size internal_size precision scale null_ok')
 
 
 class BaseDatabaseIntrospection(object):
@@ -1251,7 +1371,8 @@ class BaseDatabaseIntrospection(object):
         in sorting order between databases.
         """
         if cursor is None:
-            cursor = self.connection.cursor()
+            with self.connection.cursor() as cursor:
+                return sorted(self.get_table_list(cursor))
         return sorted(self.get_table_list(cursor))
 
     def get_table_list(self, cursor):
@@ -1269,10 +1390,11 @@ class BaseDatabaseIntrospection(object):
         If only_existing is True, the resulting list will only include the tables
         that actually exist in the database.
         """
-        from django.db import models, router
+        from django.apps import apps
+        from django.db import router
         tables = set()
-        for app in models.get_apps():
-            for model in router.get_migratable_models(app, self.connection.alias):
+        for app_config in apps.get_app_configs():
+            for model in router.get_migratable_models(app_config, self.connection.alias):
                 if not model._meta.managed:
                     continue
                 tables.add(model._meta.db_table)
@@ -1289,10 +1411,11 @@ class BaseDatabaseIntrospection(object):
 
     def installed_models(self, tables):
         "Returns a set of all models represented by the provided list of table names."
-        from django.db import models, router
+        from django.apps import apps
+        from django.db import router
         all_models = []
-        for app in models.get_apps():
-            all_models.extend(router.get_migratable_models(app, self.connection.alias))
+        for app_config in apps.get_app_configs():
+            all_models.extend(router.get_migratable_models(app_config, self.connection.alias))
         tables = list(map(self.table_name_converter, tables))
         return set([
             m for m in all_models
@@ -1301,13 +1424,13 @@ class BaseDatabaseIntrospection(object):
 
     def sequence_list(self):
         "Returns a list of information about all DB sequences for all models in all apps."
+        from django.apps import apps
         from django.db import models, router
 
-        apps = models.get_apps()
         sequence_list = []
 
-        for app in apps:
-            for model in router.get_migratable_models(app, self.connection.alias):
+        for app_config in apps.get_app_configs():
+            for model in router.get_migratable_models(app_config, self.connection.alias):
                 if not model._meta.managed:
                     continue
                 if model._meta.swapped:
@@ -1391,11 +1514,36 @@ class BaseDatabaseClient(object):
 
 class BaseDatabaseValidation(object):
     """
-    This class encapsualtes all backend-specific model validation.
+    This class encapsulates all backend-specific model validation.
     """
     def __init__(self, connection):
         self.connection = connection
 
     def validate_field(self, errors, opts, f):
-        "By default, there is no backend-specific validation"
+        """
+        By default, there is no backend-specific validation.
+
+        This method has been deprecated by the new checks framework. New
+        backends should implement check_field instead.
+        """
+        # This is deliberately commented out. It exists as a marker to
+        # remind us to remove this method, and the check_field() shim,
+        # when the time comes.
+        # warnings.warn('"validate_field" has been deprecated", RemovedInDjango19Warning)
         pass
+
+    def check_field(self, field, **kwargs):
+        class ErrorList(list):
+            """A dummy list class that emulates API used by the older
+            validate_field() method. When validate_field() is fully
+            deprecated, this dummy can be removed too.
+            """
+            def add(self, opts, error_message):
+                self.append(checks.Error(error_message, hint=None, obj=field))
+
+        errors = ErrorList()
+        # Some tests create fields in isolation -- the fields are not attached
+        # to any model, so they have no `model` attribute.
+        opts = field.model._meta if hasattr(field, 'model') else None
+        self.validate_field(errors, field, opts)
+        return list(errors)

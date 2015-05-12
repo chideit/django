@@ -5,6 +5,7 @@ from functools import partial
 from importlib import import_module
 from inspect import getargspec, getcallargs
 
+from django.apps import apps
 from django.conf import settings
 from django.template.context import (BaseContext, Context, RequestContext,  # NOQA: imported for backwards compatibility
     ContextPopException)
@@ -16,7 +17,7 @@ from django.utils.translation import ugettext_lazy, pgettext_lazy
 from django.utils.safestring import (SafeData, EscapeData, mark_safe,
     mark_for_escaping)
 from django.utils.formats import localize
-from django.utils.html import escape
+from django.utils.html import conditional_escape
 from django.utils.module_loading import module_has_submodule
 from django.utils import six
 from django.utils.timezone import template_localtime
@@ -68,7 +69,7 @@ libraries = {}
 builtins = []
 
 # True if TEMPLATE_STRING_IF_INVALID contains a format string (%s). None means
-# uninitialised.
+# uninitialized.
 invalid_var_format_string = None
 
 
@@ -92,8 +93,7 @@ class VariableDoesNotExist(Exception):
         self.params = params
 
     def __str__(self):
-        return self.msg % tuple(force_text(p, errors='replace')
-                                 for p in self.params)
+        return self.msg % tuple(force_text(p, errors='replace') for p in self.params)
 
 
 class InvalidTemplateLibrary(Exception):
@@ -545,9 +545,6 @@ class FilterExpression(object):
         2
         >>> fe.var
         <Variable: 'variable'>
-
-    This class should never be instantiated outside of the
-    get_filters_from_token helper function.
     """
     def __init__(self, token, parser):
         self.token = token
@@ -884,7 +881,7 @@ def render_value_in_context(value, context):
     value = force_text(value)
     if ((context.autoescape and not isinstance(value, SafeData)) or
             isinstance(value, EscapeData)):
-        return escape(value)
+        return conditional_escape(value)
     else:
         return value
 
@@ -1055,8 +1052,7 @@ class TagHelperNode(Node):
         resolved_args = [var.resolve(context) for var in self.args]
         if self.takes_context:
             resolved_args = [context] + resolved_args
-        resolved_kwargs = dict((k, v.resolve(context))
-                                for k, v in self.kwargs.items())
+        resolved_kwargs = dict((k, v.resolve(context)) for k, v in self.kwargs.items())
         return resolved_args, resolved_kwargs
 
 
@@ -1304,9 +1300,12 @@ def get_templatetags_modules():
         # Populate list once per process. Mutate the local list first, and
         # then assign it to the global name to ensure there are no cases where
         # two threads try to populate it simultaneously.
-        for app_module in ['django'] + list(settings.INSTALLED_APPS):
+
+        templatetags_modules_candidates = ['django.templatetags']
+        templatetags_modules_candidates += ['%s.templatetags' % app_config.name
+            for app_config in apps.get_app_configs()]
+        for templatetag_module in templatetags_modules_candidates:
             try:
-                templatetag_module = '%s.templatetags' % app_module
                 import_module(templatetag_module)
                 _templatetags_modules.append(templatetag_module)
             except ImportError:
@@ -1352,3 +1351,4 @@ def add_to_builtins(module):
 
 add_to_builtins('django.template.defaulttags')
 add_to_builtins('django.template.defaultfilters')
+add_to_builtins('django.template.loader_tags')

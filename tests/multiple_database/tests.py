@@ -10,8 +10,7 @@ from django.core import management
 from django.db import connections, router, DEFAULT_DB_ALIAS, transaction
 from django.db.models import signals
 from django.db.utils import ConnectionRouter
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils.six import StringIO
 
 from .models import Book, Person, Pet, Review, UserProfile
@@ -183,7 +182,7 @@ class QueryTestCase(TestCase):
         dive = Book.objects.using('other').get(title="Dive into Python")
         mark = Person.objects.using('other').get(name="Mark Pilgrim")
 
-        # Retrive related object by descriptor. Related objects should be database-baound
+        # Retrieve related object by descriptor. Related objects should be database-bound
         self.assertEqual(list(dive.authors.all().values_list('name', flat=True)),
             ['Mark Pilgrim'])
 
@@ -398,7 +397,7 @@ class QueryTestCase(TestCase):
 
         chris = Person.objects.using('other').create(name="Chris Mills")
 
-        # Save the author's favourite books
+        # Save the author's favorite books
         pro.editor = george
         pro.save()
 
@@ -426,7 +425,7 @@ class QueryTestCase(TestCase):
         chris = Person.objects.using('other').get(name="Chris Mills")
         dive = Book.objects.using('other').get(title="Dive into Python")
 
-        # Retrive related object by descriptor. Related objects should be database-baound
+        # Retrieve related object by descriptor. Related objects should be database-bound
         self.assertEqual(list(chris.edited.values_list('title', flat=True)),
             ['Dive into Python'])
 
@@ -621,7 +620,7 @@ class QueryTestCase(TestCase):
         alice_profile = UserProfile.objects.using('default').get(flavor='chocolate')
         bob_profile = UserProfile.objects.using('other').get(flavor='crunchy frog')
 
-        # Retrive related object by descriptor. Related objects should be database-baound
+        # Retrieve related object by descriptor. Related objects should be database-bound
         self.assertEqual(alice_profile.user.username, 'alice')
         self.assertEqual(bob_profile.user.username, 'bob')
 
@@ -648,7 +647,7 @@ class QueryTestCase(TestCase):
 
         new_bob_profile = UserProfile(flavor="spring surprise")
 
-        # assigning a profile requires a explicit pk as the object isn't saved
+        # assigning a profile requires an explicit pk as the object isn't saved
         charlie = User(pk=51, username='charlie', email='charlie@example.com')
         charlie.set_unusable_password()
 
@@ -722,7 +721,7 @@ class QueryTestCase(TestCase):
         # Reget the objects to clear caches
         dive = Book.objects.using('other').get(title="Dive into Python")
 
-        # Retrive related object by descriptor. Related objects should be database-bound
+        # Retrieve related object by descriptor. Related objects should be database-bound
         self.assertEqual(list(dive.reviews.all().values_list('source', flat=True)),
             ['Python Weekly'])
 

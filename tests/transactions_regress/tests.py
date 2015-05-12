@@ -5,8 +5,8 @@ from unittest import skipIf, skipUnless, SkipTest
 from django.db import (connection, connections, transaction, DEFAULT_DB_ALIAS, DatabaseError,
                        IntegrityError)
 from django.db.transaction import commit_on_success, commit_manually, TransactionManagementError
-from django.test import TransactionTestCase, skipUnlessDBFeature
-from django.test.utils import override_settings, IgnoreDeprecationWarningsMixin
+from django.test import TransactionTestCase, override_settings, skipUnlessDBFeature
+from django.test.utils import IgnoreDeprecationWarningsMixin
 
 from .models import Mod, M2mA, M2mB, SubMod
 
@@ -54,8 +54,8 @@ class TestTransactionClosing(IgnoreDeprecationWarningsMixin, TransactionTestCase
         @commit_on_success
         def raw_sql():
             "Write a record using raw sql under a commit_on_success decorator"
-            cursor = connection.cursor()
-            cursor.execute("INSERT into transactions_regress_mod (fld) values (18)")
+            with connection.cursor() as cursor:
+                cursor.execute("INSERT into transactions_regress_mod (fld) values (18)")
 
         raw_sql()
         # Rollback so that if the decorator didn't commit, the record is unwritten
@@ -143,10 +143,10 @@ class TestTransactionClosing(IgnoreDeprecationWarningsMixin, TransactionTestCase
             (reference). All this under commit_on_success, so the second insert should
             be committed.
             """
-            cursor = connection.cursor()
-            cursor.execute("INSERT into transactions_regress_mod (fld) values (2)")
-            transaction.rollback()
-            cursor.execute("INSERT into transactions_regress_mod (fld) values (2)")
+            with connection.cursor() as cursor:
+                cursor.execute("INSERT into transactions_regress_mod (fld) values (2)")
+                transaction.rollback()
+                cursor.execute("INSERT into transactions_regress_mod (fld) values (2)")
 
         reuse_cursor_ref()
         # Rollback so that if the decorator didn't commit, the record is unwritten
@@ -195,11 +195,11 @@ class TestTransactionClosing(IgnoreDeprecationWarningsMixin, TransactionTestCase
 
 
 @skipIf(connection.vendor == 'sqlite'
-        and connection.settings_dict['TEST_NAME'] in (None, '', ':memory:'),
+        and connection.settings_dict['TEST']['NAME'] in (None, '', ':memory:'),
         "Cannot establish two connections to an in-memory SQLite database.")
 class TestNewConnection(IgnoreDeprecationWarningsMixin, TransactionTestCase):
     """
-    Check that new connections don't have special behaviour.
+    Check that new connections don't have special behavior.
     """
 
     available_apps = ['transactions_regress']

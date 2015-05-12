@@ -8,11 +8,9 @@ try:
 except ImportError:
     pytz = None
 
-from django.conf import settings
 from django.contrib.humanize.templatetags import humanize
 from django.template import Template, Context, defaultfilters
-from django.test import TestCase
-from django.test.utils import override_settings, TransRealMixin
+from django.test import TestCase, override_settings
 from django.utils.html import escape
 from django.utils.timezone import utc, get_fixed_timezone
 from django.utils import translation
@@ -28,7 +26,7 @@ now = datetime.datetime(2012, 3, 9, 22, 30)
 
 class MockDateTime(datetime.datetime):
     @classmethod
-    def now(self, tz=None):
+    def now(cls, tz=None):
         if tz is None or tz.utcoffset(now) is None:
             return now
         else:
@@ -36,7 +34,7 @@ class MockDateTime(datetime.datetime):
             return now.replace(tzinfo=tz) + tz.utcoffset(now)
 
 
-class HumanizeTests(TransRealMixin, TestCase):
+class HumanizeTests(TestCase):
 
     def humanize_tester(self, test_list, result_list, method, normalize_result_func=escape):
         for test_content, result in zip(test_list, result_list):
@@ -163,8 +161,7 @@ class HumanizeTests(TransRealMixin, TestCase):
         # As 24h of difference they will never be the same
         self.assertNotEqual(naturalday_one, naturalday_two)
 
-    @skipIf(settings.TIME_ZONE != "America/Chicago" and pytz is None,
-            "this test requires pytz when a non-default time zone is set")
+    @skipIf(pytz is None, "this test requires pytz")
     def test_naturalday_uses_localtime(self):
         # Regression for #18504
         # This is 2012-03-08HT19:30:00-06:00 in America/Chicago
@@ -240,5 +237,52 @@ class HumanizeTests(TransRealMixin, TestCase):
                 with override_settings(USE_TZ=True):
                     self.humanize_tester(
                         test_list, result_list_with_tz_support, 'naturaltime')
+        finally:
+            humanize.datetime = orig_humanize_datetime
+
+    def test_naturaltime_as_documented(self):
+        """
+        #23340 -- Verify the documented behavior of humanize.naturaltime.
+        """
+        time_format = '%d %b %Y %H:%M:%S'
+        documented_now = datetime.datetime.strptime('17 Feb 2007 16:30:00', time_format)
+
+        test_data = (
+            ('17 Feb 2007 16:30:00', 'now'),
+            ('17 Feb 2007 16:29:31', '29 seconds ago'),
+            ('17 Feb 2007 16:29:00', 'a minute ago'),
+            ('17 Feb 2007 16:25:35', '4 minutes ago'),
+            ('17 Feb 2007 15:30:29', '59 minutes ago'),
+            ('17 Feb 2007 15:30:01', '59 minutes ago'),
+            ('17 Feb 2007 15:30:00', 'an hour ago'),
+            ('17 Feb 2007 13:31:29', '2 hours ago'),
+            ('16 Feb 2007 13:31:29', '1 day, 2 hours ago'),
+            ('16 Feb 2007 13:30:01', '1 day, 2 hours ago'),
+            ('16 Feb 2007 13:30:00', '1 day, 3 hours ago'),
+            ('17 Feb 2007 16:30:30', '30 seconds from now'),
+            ('17 Feb 2007 16:30:29', '29 seconds from now'),
+            ('17 Feb 2007 16:31:00', 'a minute from now'),
+            ('17 Feb 2007 16:34:35', '4 minutes from now'),
+            ('17 Feb 2007 17:30:29', 'an hour from now'),
+            ('17 Feb 2007 18:31:29', '2 hours from now'),
+            ('18 Feb 2007 16:31:29', '1 day from now'),
+            ('26 Feb 2007 18:31:29', '1 week, 2 days from now'),
+        )
+
+        class DocumentedMockDateTime(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                if tz is None or tz.utcoffset(documented_now) is None:
+                    return documented_now
+                else:
+                    return documented_now.replace(tzinfo=tz) + tz.utcoffset(now)
+
+        orig_humanize_datetime = humanize.datetime
+        humanize.datetime = DocumentedMockDateTime
+        try:
+            for test_time_string, expected_natural_time in test_data:
+                test_time = datetime.datetime.strptime(test_time_string, time_format)
+                natural_time = humanize.naturaltime(test_time).replace('\xa0', ' ')
+                self.assertEqual(expected_natural_time, natural_time)
         finally:
             humanize.datetime = orig_humanize_datetime

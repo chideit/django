@@ -27,7 +27,7 @@ Specifying widgets
 Whenever you specify a field on a form, Django will use a default widget
 that is appropriate to the type of data that is to be displayed. To find
 which widget is used on which field, see the documentation about
-:ref:`built-in fields`.
+:ref:`built-in-fields`.
 
 However, if you want to use a different widget for a field, you can
 just use the :attr:`~Field.widget` argument on the field definition. For
@@ -148,11 +148,9 @@ the 'type' attribute to take advantage of the new HTML5 input types.  To do
 this, you use the :attr:`Widget.attrs` argument when creating the widget::
 
     class CommentForm(forms.Form):
-        name = forms.CharField(
-                    widget=forms.TextInput(attrs={'class':'special'}))
+        name = forms.CharField(widget=forms.TextInput(attrs={'class': 'special'}))
         url = forms.URLField()
-        comment = forms.CharField(
-                   widget=forms.TextInput(attrs={'size':'40'}))
+        comment = forms.CharField(widget=forms.TextInput(attrs={'size': '40'}))
 
 Django will then include the extra attributes in the rendered output:
 
@@ -216,10 +214,15 @@ foundation for custom widgets.
         The 'value' given is not guaranteed to be valid input, therefore
         subclass implementations should program defensively.
 
-    .. method:: value_from_datadict(self, data, files, name)
+    .. method:: value_from_datadict(data, files, name)
 
         Given a dictionary of data and this widget's name, returns the value
-        of this widget. Returns ``None`` if a value wasn't provided.
+        of this widget. ``files`` may contain data coming from
+        :attr:`request.FILES <django.http.HttpRequest.FILES>`. Returns ``None``
+        if a value wasn't provided. Note also that ``value_from_datadict`` may
+        be called more than once during handling of form data, so if you
+        customize it and add expensive processing, you should implement some
+        caching mechanism yourself.
 
 .. class:: MultiWidget(widgets, attrs=None)
 
@@ -522,7 +525,7 @@ Selector and checkbox widgets
 
     .. attribute:: CheckboxInput.check_test
 
-        A callable that takes the value of the CheckBoxInput and returns
+        A callable that takes the value of the ``CheckboxInput`` and returns
         ``True`` if the checkbox should be checked for that value.
 
 ``Select``
@@ -564,7 +567,7 @@ Selector and checkbox widgets
     .. code-block:: html
 
         <ul>
-          <li><input type='radio' ...></li>
+          <li><input type='radio' name='...'></li>
           ...
         </ul>
 
@@ -660,7 +663,7 @@ the widget.
     .. code-block:: html
 
         <ul>
-          <li><input type='checkbox' ...></li>
+          <li><input type='checkbox' name='...' ></li>
           ...
         </ul>
 

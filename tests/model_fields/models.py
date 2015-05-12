@@ -12,6 +12,7 @@ except ImproperlyConfigured:
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.db.models.fields.files import ImageFieldFile, ImageField
+from django.utils import six
 
 
 class Foo(models.Model):
@@ -25,7 +26,7 @@ def get_foo():
 
 class Bar(models.Model):
     b = models.CharField(max_length=10)
-    a = models.ForeignKey(Foo, default=get_foo)
+    a = models.ForeignKey(Foo, default=get_foo, related_name=b'bars')
 
 
 class Whiz(models.Model):
@@ -45,17 +46,60 @@ class Whiz(models.Model):
     c = models.IntegerField(choices=CHOICES, null=True)
 
 
+class Counter(six.Iterator):
+    def __init__(self):
+        self.n = 1
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.n > 5:
+            raise StopIteration
+        else:
+            self.n += 1
+            return (self.n, 'val-' + str(self.n))
+
+
+class WhizIter(models.Model):
+    c = models.IntegerField(choices=Counter(), null=True)
+
+
+class WhizIterEmpty(models.Model):
+    c = models.CharField(choices=(x for x in []), blank=True, max_length=1)
+
+
 class BigD(models.Model):
     d = models.DecimalField(max_digits=38, decimal_places=30)
+
+
+class FloatModel(models.Model):
+    size = models.FloatField()
 
 
 class BigS(models.Model):
     s = models.SlugField(max_length=255)
 
 
-class BigInt(models.Model):
+class SmallIntegerModel(models.Model):
+    value = models.SmallIntegerField()
+
+
+class IntegerModel(models.Model):
+    value = models.IntegerField()
+
+
+class BigIntegerModel(models.Model):
     value = models.BigIntegerField()
     null_value = models.BigIntegerField(null=True, blank=True)
+
+
+class PositiveSmallIntegerModel(models.Model):
+    value = models.PositiveSmallIntegerField()
+
+
+class PositiveIntegerModel(models.Model):
+    value = models.PositiveIntegerField()
 
 
 class Post(models.Model):
@@ -72,10 +116,25 @@ class BooleanModel(models.Model):
     string = models.CharField(max_length=10, default='abc')
 
 
+class DateTimeModel(models.Model):
+    d = models.DateField()
+    dt = models.DateTimeField()
+    t = models.TimeField()
+
+
+class PrimaryKeyCharModel(models.Model):
+    string = models.CharField(max_length=10, primary_key=True)
+
+
 class FksToBooleans(models.Model):
-    """Model wih FKs to models with {Null,}BooleanField's, #15040"""
+    """Model with FKs to models with {Null,}BooleanField's, #15040"""
     bf = models.ForeignKey(BooleanModel)
     nbf = models.ForeignKey(NullBooleanModel)
+
+
+class FkToChar(models.Model):
+    """Model with FK to a model with a CharField primary key, #19299"""
+    out = models.ForeignKey(PrimaryKeyCharModel)
 
 
 class RenamedField(models.Model):
@@ -151,7 +210,7 @@ if Image:
         attr_class = TestImageFieldFile
 
     # Set up a temp directory for file storage.
-    temp_storage_dir = tempfile.mkdtemp()
+    temp_storage_dir = tempfile.mkdtemp(dir=os.environ['DJANGO_TEST_TEMP_DIR'])
     temp_storage = FileSystemStorage(temp_storage_dir)
     temp_upload_to_dir = os.path.join(temp_storage.location, 'tests')
 

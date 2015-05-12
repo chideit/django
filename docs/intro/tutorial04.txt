@@ -34,7 +34,8 @@ A quick rundown:
   ``value`` of each radio button is the associated question choice's ID. The
   ``name`` of each radio button is ``"choice"``. That means, when somebody
   selects one of the radio buttons and submits the form, it'll send the
-  POST data ``choice=3``. This is the basic concept of HTML forms.
+  POST data ``choice=#`` where # is the ID of the selected choice. This is the
+  basic concept of HTML forms.
 
 * We set the form's ``action`` to ``{% url 'polls:vote' question.id %}``, and we
   set ``method="post"``. Using ``method="post"`` (as opposed to
@@ -71,6 +72,7 @@ create a real version. Add the following to ``polls/views.py``:
     from django.shortcuts import get_object_or_404, render
     from django.http import HttpResponseRedirect, HttpResponse
     from django.core.urlresolvers import reverse
+
     from polls.models import Choice, Question
     # ...
     def vote(request, question_id):
@@ -105,9 +107,9 @@ This code includes a few things we haven't covered yet in this tutorial:
   <django.http.HttpRequest.POST>` in our code, to ensure that data is only
   altered via a POST call.
 
-* ``request.POST['choice']`` will raise :exc:`~exceptions.KeyError` if
+* ``request.POST['choice']`` will raise :exc:`KeyError` if
   ``choice`` wasn't provided in POST data. The above code checks for
-  :exc:`~exceptions.KeyError` and redisplays the question form with an error
+  :exc:`KeyError` and redisplays the question form with an error
   message if ``choice`` isn't given.
 
 * After incrementing the choice count, the code returns an
@@ -232,6 +234,11 @@ First, open the ``polls/urls.py`` URLconf and change it like so:
         url(r'^(?P<question_id>\d+)/vote/$', views.vote, name='vote'),
     )
 
+Note that the name of the matched pattern in the regexes of the second and third
+patterns has changed from ``<question_id>`` to ``<pk>``.
+
+.. _tutorial04-amend-views:
+
 Amend views
 -----------
 
@@ -270,7 +277,7 @@ views and use Django's generic views instead. To do so, open the
 
 
     def vote(request, question_id):
-        ....
+        ... # same as above
 
 We're using two generic views here:
 :class:`~django.views.generic.list.ListView` and

@@ -19,9 +19,11 @@ from django.utils import six
 
 __all__ = [
     'utc', 'get_fixed_timezone',
-    'get_default_timezone', 'get_current_timezone',
+    'get_default_timezone', 'get_default_timezone_name',
+    'get_current_timezone', 'get_current_timezone_name',
     'activate', 'deactivate', 'override',
-    'is_naive', 'is_aware', 'make_aware', 'make_naive',
+    'localtime', 'now',
+    'is_aware', 'is_naive', 'make_aware', 'make_naive',
 ]
 
 
@@ -304,9 +306,11 @@ def localtime(value, timezone=None):
     """
     if timezone is None:
         timezone = get_current_timezone()
+    # If `value` is naive, astimezone() will raise a ValueError,
+    # so we don't need to perform a redundant check.
     value = value.astimezone(timezone)
     if hasattr(timezone, 'normalize'):
-        # available for pytz time zones
+        # This method is available for pytz time zones.
         value = timezone.normalize(value)
     return value
 
@@ -350,10 +354,14 @@ def make_aware(value, timezone):
     Makes a naive datetime.datetime in a given time zone aware.
     """
     if hasattr(timezone, 'localize'):
-        # available for pytz time zones
+        # This method is available for pytz time zones.
         return timezone.localize(value, is_dst=None)
     else:
-        # may be wrong around DST changes
+        # Check that we won't overwrite the timezone of an aware datetime.
+        if is_aware(value):
+            raise ValueError(
+                "make_aware expects a naive datetime, got %s" % value)
+        # This may be wrong around DST changes!
         return value.replace(tzinfo=timezone)
 
 
@@ -361,8 +369,10 @@ def make_naive(value, timezone):
     """
     Makes an aware datetime.datetime naive in a given time zone.
     """
+    # If `value` is naive, astimezone() will raise a ValueError,
+    # so we don't need to perform a redundant check.
     value = value.astimezone(timezone)
     if hasattr(timezone, 'normalize'):
-        # available for pytz time zones
+        # This method is available for pytz time zones.
         value = timezone.normalize(value)
     return value.replace(tzinfo=None)

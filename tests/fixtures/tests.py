@@ -6,6 +6,7 @@ from django.contrib.sites.models import Site
 from django.core import management
 from django.db import connection, IntegrityError
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
+from django.utils.encoding import force_text
 from django.utils import six
 
 from .models import Article, Book, Spy, Tag, Visa
@@ -93,6 +94,10 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         # Specify a dump that specifies Article both explicitly and implicitly
         self._dumpdata_assert(['fixtures.Article', 'fixtures'], '[{"pk": 1, "model": "fixtures.category", "fields": {"description": "Latest news stories", "title": "News Stories"}}, {"pk": 2, "model": "fixtures.article", "fields": {"headline": "Poker has no place on ESPN", "pub_date": "2006-06-16T12:00:00"}}, {"pk": 3, "model": "fixtures.article", "fields": {"headline": "Time to reform copyright", "pub_date": "2006-06-16T13:00:00"}}, {"pk": 10, "model": "fixtures.book", "fields": {"name": "Achieving self-awareness of Python programs", "authors": []}}]')
 
+        # Specify a dump that specifies Article both explicitly and implicitly,
+        # but lists the app first (#22025).
+        self._dumpdata_assert(['fixtures', 'fixtures.Article'], '[{"pk": 1, "model": "fixtures.category", "fields": {"description": "Latest news stories", "title": "News Stories"}}, {"pk": 2, "model": "fixtures.article", "fields": {"headline": "Poker has no place on ESPN", "pub_date": "2006-06-16T12:00:00"}}, {"pk": 3, "model": "fixtures.article", "fields": {"headline": "Time to reform copyright", "pub_date": "2006-06-16T13:00:00"}}, {"pk": 10, "model": "fixtures.book", "fields": {"name": "Achieving self-awareness of Python programs", "authors": []}}]')
+
         # Same again, but specify in the reverse order
         self._dumpdata_assert(['fixtures'], '[{"pk": 1, "model": "fixtures.category", "fields": {"description": "Latest news stories", "title": "News Stories"}}, {"pk": 2, "model": "fixtures.article", "fields": {"headline": "Poker has no place on ESPN", "pub_date": "2006-06-16T12:00:00"}}, {"pk": 3, "model": "fixtures.article", "fields": {"headline": "Time to reform copyright", "pub_date": "2006-06-16T13:00:00"}}, {"pk": 10, "model": "fixtures.book", "fields": {"name": "Achieving self-awareness of Python programs", "authors": []}}]')
 
@@ -152,18 +157,6 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
             '<Book: Achieving self-awareness of Python programs>',
             '<Book: Music for all ages by Artist formerly known as "Prince" and Django Reinhardt>'
         ])
-
-        # Loading a fixture that doesn't exist emits a warning
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            management.call_command('loaddata', 'unknown.json', verbosity=0)
-        self.assertEqual(len(w), 1)
-        self.assertTrue(w[0].message, "No fixture named 'unknown' found.")
-
-        # An attempt to load a nonexistent 'initial_data' fixture isn't an error
-        with warnings.catch_warnings(record=True) as w:
-            management.call_command('loaddata', 'initial_data.json', verbosity=0)
-        self.assertEqual(len(w), 0)
 
         # object list is unaffected
         self.assertQuerysetEqual(Article.objects.all(), [
@@ -300,7 +293,7 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         ])
 
     def test_ambiguous_compressed_fixture(self):
-        # The name "fixture5" is ambigous, so loading it will raise an error
+        # The name "fixture5" is ambiguous, so loading it will raise an error
         with self.assertRaises(management.CommandError) as cm:
             management.call_command('loaddata', 'fixture5', verbosity=0)
             self.assertIn("Multiple fixtures named 'fixture5'", cm.exception.args[0])
@@ -329,6 +322,20 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
             management.call_command('loaddata', 'invalid.json', verbosity=0)
             self.assertIn("Could not load fixtures.Article(pk=1):", cm.exception.args[0])
 
+    def test_loaddata_app_option(self):
+        """
+        Verifies that the --app option works.
+        """
+        with warnings.catch_warnings():
+            # Ignore: No fixture named ...
+            warnings.filterwarnings("ignore", category=UserWarning)
+            management.call_command('loaddata', 'db_fixture_1', verbosity=0, app_label="someotherapp")
+        self.assertQuerysetEqual(Article.objects.all(), [])
+        management.call_command('loaddata', 'db_fixture_1', verbosity=0, app_label="fixtures")
+        self.assertQuerysetEqual(Article.objects.all(), [
+            '<Article: Who needs more than one database?>',
+        ])
+
     def test_loading_using(self):
         # Load db fixtures 1 and 2. These will load using the 'default' database identifier explicitly
         management.call_command('loaddata', 'db_fixture_1', verbosity=0, using='default')
@@ -340,10 +347,9 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
 
     def test_unmatched_identifier_loading(self):
         # Try to load db fixture 3. This won't load because the database identifier doesn't match
-        with warnings.catch_warnings(record=True):
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
             management.call_command('loaddata', 'db_fixture_3', verbosity=0)
-
-        with warnings.catch_warnings(record=True):
             management.call_command('loaddata', 'db_fixture_3', verbosity=0, using='default')
         self.assertQuerysetEqual(Article.objects.all(), [])
 
@@ -364,6 +370,35 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         # Dump the current contents of the database as an XML fixture
         self._dumpdata_assert(['fixtures'], """<?xml version="1.0" encoding="utf-8"?>
 <django-objects version="1.0"><object pk="1" model="fixtures.category"><field type="CharField" name="title">News Stories</field><field type="TextField" name="description">Latest news stories</field></object><object pk="2" model="fixtures.article"><field type="CharField" name="headline">Poker has no place on ESPN</field><field type="DateTimeField" name="pub_date">2006-06-16T12:00:00</field></object><object pk="3" model="fixtures.article"><field type="CharField" name="headline">Time to reform copyright</field><field type="DateTimeField" name="pub_date">2006-06-16T13:00:00</field></object><object pk="1" model="fixtures.tag"><field type="CharField" name="name">copyright</field><field to="contenttypes.contenttype" name="tagged_type" rel="ManyToOneRel"><natural>fixtures</natural><natural>article</natural></field><field type="PositiveIntegerField" name="tagged_id">3</field></object><object pk="2" model="fixtures.tag"><field type="CharField" name="name">law</field><field to="contenttypes.contenttype" name="tagged_type" rel="ManyToOneRel"><natural>fixtures</natural><natural>article</natural></field><field type="PositiveIntegerField" name="tagged_id">3</field></object><object pk="1" model="fixtures.person"><field type="CharField" name="name">Django Reinhardt</field></object><object pk="2" model="fixtures.person"><field type="CharField" name="name">Stephane Grappelli</field></object><object pk="3" model="fixtures.person"><field type="CharField" name="name">Prince</field></object><object pk="10" model="fixtures.book"><field type="CharField" name="name">Achieving self-awareness of Python programs</field><field to="fixtures.person" name="authors" rel="ManyToManyRel"></field></object></django-objects>""", format='xml', natural_foreign_keys=True)
+
+
+class NonExistentFixtureTests(TestCase):
+    """
+    Custom class to limit fixture dirs.
+    """
+    available_apps = ['django.contrib.auth', 'django.contrib.contenttypes']
+
+    def test_loaddata_not_existent_fixture_file(self):
+        stdout_output = six.StringIO()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            # With verbosity=2, we get both stdout output and a warning
+            management.call_command(
+                'loaddata',
+                'this_fixture_doesnt_exist',
+                verbosity=2,
+                stdout=stdout_output,
+            )
+        self.assertIn("No fixture 'this_fixture_doesnt_exist' in",
+            force_text(stdout_output.getvalue()))
+        self.assertEqual(len(w), 1)
+        self.assertEqual(force_text(w[0].message),
+            "No fixture named 'this_fixture_doesnt_exist' found.")
+
+        # An attempt to load a non-existent 'initial_data' fixture doesn't produce any warning
+        with warnings.catch_warnings(record=True) as w:
+            management.call_command('loaddata', 'initial_data.json', verbosity=0)
+        self.assertEqual(len(w), 0)
 
 
 class FixtureTransactionTests(DumpDataAssertMixin, TransactionTestCase):

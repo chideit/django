@@ -3,6 +3,7 @@
 # files to search for such a header to decode the source file content
 from __future__ import unicode_literals
 
+import importlib
 import inspect
 import os
 import re
@@ -15,17 +16,33 @@ from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.urlresolvers import reverse
 from django.template.base import TemplateDoesNotExist
-from django.test import TestCase, RequestFactory
-from django.test.utils import (override_settings, setup_test_template_loader,
-    restore_template_loaders)
+from django.test import TestCase, RequestFactory, override_settings
+from django.test.utils import (
+    setup_test_template_loader, restore_template_loaders)
 from django.utils.encoding import force_text, force_bytes
-from django.views.debug import ExceptionReporter
+from django.utils import six
+from django.views.debug import CallableSettingWrapper, ExceptionReporter
 
 from .. import BrokenException, except_args
 from ..views import (sensitive_view, non_sensitive_view, paranoid_view,
     custom_exception_reporter_filter_view, sensitive_method_view,
     sensitive_args_function_caller, sensitive_kwargs_function_caller,
     multivalue_dict_key_error)
+
+
+class CallableSettingWrapperTests(TestCase):
+    """ Unittests for CallableSettingWrapper
+    """
+    def test_repr(self):
+        class WrappedCallable(object):
+            def __repr__(self):
+                return "repr from the wrapped callable"
+
+            def __call__(self):
+                pass
+
+        actual = repr(CallableSettingWrapper(WrappedCallable()))
+        self.assertEqual(actual, "repr from the wrapped callable")
 
 
 @override_settings(DEBUG=True, TEMPLATE_DEBUG=True)
@@ -47,7 +64,7 @@ class DebugViewTests(TestCase):
         # Ensure no 403.html template exists to test the default case.
         setup_test_template_loader({})
         try:
-            response = self.client.get('/views/raises403/')
+            response = self.client.get('/raises403/')
             self.assertContains(response, '<h1>403 Forbidden</h1>', status_code=403)
         finally:
             restore_template_loaders()
@@ -58,14 +75,22 @@ class DebugViewTests(TestCase):
             {'403.html': 'This is a test template for a 403 Forbidden error.'}
         )
         try:
-            response = self.client.get('/views/raises403/')
+            response = self.client.get('/raises403/')
             self.assertContains(response, 'test template', status_code=403)
         finally:
             restore_template_loaders()
 
     def test_404(self):
-        response = self.client.get('/views/raises404/')
+        response = self.client.get('/raises404/')
         self.assertEqual(response.status_code, 404)
+
+    def test_raised_404(self):
+        response = self.client.get('/views/raises404/')
+        self.assertContains(response, "<code>not-in-urls</code>, didn't match", status_code=404)
+
+    def test_404_not_in_urls(self):
+        response = self.client.get('/not-in-urls')
+        self.assertContains(response, "<code>not-in-urls</code>, didn't match", status_code=404)
 
     def test_view_exceptions(self):
         for n in range(len(except_args)):
@@ -77,7 +102,7 @@ class DebugViewTests(TestCase):
         Numeric IDs and fancy traceback context blocks line numbers shouldn't be localized.
         """
         with self.settings(DEBUG=True, USE_L10N=True):
-            response = self.client.get('/views/raises500/')
+            response = self.client.get('/raises500/')
             # We look for a HTML fragment of the form
             # '<div class="context" id="c38123208">', not '<div class="context" id="c38,123,208"'
             self.assertContains(response, '<div class="context" id="', status_code=500)
@@ -136,6 +161,36 @@ class DebugViewTests(TestCase):
         Make sure if you don't specify a template, the debug view doesn't blow up.
         """
         self.assertRaises(TemplateDoesNotExist, self.client.get, '/render_no_template/')
+
+    @override_settings(ROOT_URLCONF='view_tests.default_urls')
+    def test_default_urlconf_template(self):
+        """
+        Make sure that the default urlconf template is shown shown instead
+        of the technical 404 page, if the user has not altered their
+        url conf yet.
+        """
+        response = self.client.get('/')
+        self.assertContains(
+            response,
+            "<h2>Congratulations on your first Django-powered page.</h2>"
+        )
+
+    @override_settings(ROOT_URLCONF='view_tests.regression_21530_urls')
+    def test_regression_21530(self):
+        """
+        Regression test for bug #21530.
+
+        If the admin app include is replaced with exactly one url
+        pattern, then the technical 404 template should be displayed.
+
+        The bug here was that an AttributeError caused a 500 response.
+        """
+        response = self.client.get('/')
+        self.assertContains(
+            response,
+            "Page not found <span>(404)</span>",
+            status_code=404
+        )
 
 
 class ExceptionReporterTests(TestCase):
@@ -238,6 +293,21 @@ class ExceptionReporterTests(TestCase):
         self.assertNotIn('<h2>Traceback ', html)
         self.assertIn('<h2>Request information</h2>', html)
         self.assertIn('<p>Request data not supplied</p>', html)
+
+    @skipIf(six.PY2, 'Bug manifests on PY3 only')
+    def test_unfrozen_importlib(self):
+        """
+        importlib is not a frozen app, but its loader thinks it's frozen which
+        results in an ImportError on Python 3. Refs #21443.
+        """
+        try:
+            request = self.rf.get('/test_view/')
+            importlib.import_module('abc.def.invalid.name')
+        except Exception:
+            exc_type, exc_value, tb = sys.exc_info()
+        reporter = ExceptionReporter(request, exc_type, exc_value, tb)
+        html = reporter.get_traceback_html()
+        self.assertIn('<h1>ImportError at /test_view/</h1>', html)
 
 
 class PlainTextReportTests(TestCase):
@@ -471,6 +541,7 @@ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
     Ensure that sensitive information can be filtered out of error reports.
     Refs #14614.
     """
+    urls = 'view_tests.urls'
     rf = RequestFactory()
 
     def test_non_sensitive_request(self):
@@ -593,7 +664,22 @@ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
         def callable_setting():
             return "This should not be displayed"
         with self.settings(DEBUG=True, FOOBAR=callable_setting):
-            response = self.client.get('/views/raises500/')
+            response = self.client.get('/raises500/')
+            self.assertNotContains(response, "This should not be displayed", status_code=500)
+
+    def test_callable_settings_forbidding_to_set_attributes(self):
+        """
+        Callable settings which forbid to set attributes should not break
+        the debug page (#23070).
+        """
+        class CallableSettingWithSlots(object):
+            __slots__ = []
+
+            def __call__(self):
+                return "This should not be displayed"
+
+        with self.settings(DEBUG=True, WITH_SLOTS=CallableSettingWithSlots()):
+            response = self.client.get('/raises500/')
             self.assertNotContains(response, "This should not be displayed", status_code=500)
 
     def test_dict_setting_with_non_str_key(self):
@@ -602,7 +688,7 @@ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
         debug page (#12744).
         """
         with self.settings(DEBUG=True, FOOBAR={42: None}):
-            response = self.client.get('/views/raises500/')
+            response = self.client.get('/raises500/')
             self.assertContains(response, 'FOOBAR', status_code=500)
 
     def test_sensitive_settings(self):
@@ -618,7 +704,7 @@ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
         ]
         for setting in sensitive_settings:
             with self.settings(DEBUG=True, **{setting: "should not be displayed"}):
-                response = self.client.get('/views/raises500/')
+                response = self.client.get('/raises500/')
                 self.assertNotContains(response, 'should not be displayed', status_code=500)
 
     def test_settings_with_sensitive_keys(self):
@@ -638,7 +724,7 @@ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
                 'recursive': {setting: "should not be displayed"},
             }
             with self.settings(DEBUG=True, FOOBAR=FOOBAR):
-                response = self.client.get('/views/raises500/')
+                response = self.client.get('/raises500/')
                 self.assertNotContains(response, 'should not be displayed', status_code=500)
 
 

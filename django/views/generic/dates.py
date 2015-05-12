@@ -482,7 +482,7 @@ class YearArchiveView(MultipleObjectTemplateResponseMixin, BaseYearArchiveView):
 
 class BaseMonthArchiveView(YearMixin, MonthMixin, BaseDateListView):
     """
-    List of objects published in a given year.
+    List of objects published in a given month.
     """
     date_list_period = 'day'
 
@@ -516,7 +516,7 @@ class BaseMonthArchiveView(YearMixin, MonthMixin, BaseDateListView):
 
 class MonthArchiveView(MultipleObjectTemplateResponseMixin, BaseMonthArchiveView):
     """
-    List of objects published in a given year.
+    List of objects published in a given month.
     """
     template_name_suffix = '_archive_month'
 
@@ -698,7 +698,7 @@ def _get_next_prev(generic_view, date, is_previous, period):
 
         * If allow_empty and allow_future are both true, this is easy: just
           return the naive result (just the next/previous day/week/month,
-          reguardless of object existence.)
+          regardless of object existence.)
 
         * If allow_empty is true, allow_future is false, and the naive result
           isn't in the future, then return it; otherwise return None.

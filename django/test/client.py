@@ -8,8 +8,8 @@ from copy import copy
 from importlib import import_module
 from io import BytesIO
 
+from django.apps import apps
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.core.handlers.base import BaseHandler
 from django.core.handlers.wsgi import WSGIRequest
 from django.core.signals import (request_started, request_finished,
@@ -82,9 +82,9 @@ def closing_iterator_wrapper(iterable, close):
 
 class ClientHandler(BaseHandler):
     """
-    A HTTP Handler that can be used for testing purposes.
-    Uses the WSGI interface to compose requests, but returns
-    the raw HttpResponse object
+    A HTTP Handler that can be used for testing purposes. Uses the WSGI
+    interface to compose requests, but returns the raw HttpResponse object with
+    the originating WSGIRequest attached to its ``wsgi_request`` attribute.
     """
     def __init__(self, enforce_csrf_checks=True, *args, **kwargs):
         self.enforce_csrf_checks = enforce_csrf_checks
@@ -105,7 +105,13 @@ class ClientHandler(BaseHandler):
         # required for backwards compatibility with external tests against
         # admin views.
         request._dont_enforce_csrf_checks = not self.enforce_csrf_checks
+
+        # Request goes through middleware.
         response = self.get_response(request)
+        # Attach the originating request to the response so that it could be
+        # later retrieved.
+        response.wsgi_request = request
+
         # We're emulating a WSGI server; we must call the close method
         # on completion.
         if response.streaming:
@@ -246,7 +252,7 @@ class RequestFactory(object):
         "Construct a generic request object."
         return WSGIRequest(self._base_environ(**request))
 
-    def _encode_data(self, data, content_type, ):
+    def _encode_data(self, data, content_type):
         if content_type is MULTIPART_CONTENT:
             return encode_multipart(BOUNDARY, data)
         else:
@@ -269,27 +275,30 @@ class RequestFactory(object):
             path = path.encode('utf-8').decode('iso-8859-1')
         return path
 
-    def get(self, path, data={}, secure=False, **extra):
+    def get(self, path, data=None, secure=False, **extra):
         "Construct a GET request."
 
+        data = {} if data is None else data
         r = {
             'QUERY_STRING': urlencode(data, doseq=True),
         }
         r.update(extra)
         return self.generic('GET', path, secure=secure, **r)
 
-    def post(self, path, data={}, content_type=MULTIPART_CONTENT,
+    def post(self, path, data=None, content_type=MULTIPART_CONTENT,
              secure=False, **extra):
         "Construct a POST request."
 
+        data = {} if data is None else data
         post_data = self._encode_data(data, content_type)
 
         return self.generic('POST', path, post_data, content_type,
                             secure=secure, **extra)
 
-    def head(self, path, data={}, secure=False, **extra):
+    def head(self, path, data=None, secure=False, **extra):
         "Construct a HEAD request."
 
+        data = {} if data is None else data
         r = {
             'QUERY_STRING': urlencode(data, doseq=True),
         }
@@ -382,7 +391,7 @@ class Client(RequestFactory):
         """
         Obtains the current session variables.
         """
-        if 'django.contrib.sessions' in settings.INSTALLED_APPS:
+        if apps.is_installed('django.contrib.sessions'):
             engine = import_module(settings.SESSION_ENGINE)
             cookie = self.cookies.get(settings.SESSION_COOKIE_NAME, None)
             if cookie:
@@ -453,7 +462,7 @@ class Client(RequestFactory):
             signals.template_rendered.disconnect(dispatch_uid=signal_uid)
             got_request_exception.disconnect(dispatch_uid="request-exception")
 
-    def get(self, path, data={}, follow=False, secure=False, **extra):
+    def get(self, path, data=None, follow=False, secure=False, **extra):
         """
         Requests a response from the server using GET.
         """
@@ -463,7 +472,7 @@ class Client(RequestFactory):
             response = self._handle_redirects(response, **extra)
         return response
 
-    def post(self, path, data={}, content_type=MULTIPART_CONTENT,
+    def post(self, path, data=None, content_type=MULTIPART_CONTENT,
              follow=False, secure=False, **extra):
         """
         Requests a response from the server using POST.
@@ -475,7 +484,7 @@ class Client(RequestFactory):
             response = self._handle_redirects(response, **extra)
         return response
 
-    def head(self, path, data={}, follow=False, secure=False, **extra):
+    def head(self, path, data=None, follow=False, secure=False, **extra):
         """
         Request a response from the server using HEAD.
         """
@@ -541,13 +550,15 @@ class Client(RequestFactory):
         are incorrect, or the user is inactive, or if the sessions framework is
         not available.
         """
+        from django.contrib.auth import authenticate, login
         user = authenticate(**credentials)
         if (user and user.is_active and
-                'django.contrib.sessions' in settings.INSTALLED_APPS):
+                apps.is_installed('django.contrib.sessions')):
             engine = import_module(settings.SESSION_ENGINE)
 
             # Create a fake request to store login details.
             request = HttpRequest()
+
             if self.session:
                 request.session = self.session
             else:
@@ -579,17 +590,17 @@ class Client(RequestFactory):
 
         Causes the authenticated user to be logged out.
         """
+        from django.contrib.auth import get_user, logout
+
         request = HttpRequest()
         engine = import_module(settings.SESSION_ENGINE)
-        UserModel = get_user_model()
         if self.session:
             request.session = self.session
-            uid = self.session.get("_auth_user_id")
-            if uid:
-                request.user = UserModel._default_manager.get(pk=uid)
+            request.user = get_user(request)
         else:
             request.session = engine.SessionStore()
         logout(request)
+        self.cookies = SimpleCookie()
 
     def _handle_redirects(self, response, **extra):
         "Follows any redirects by requesting responses from the server using GET."

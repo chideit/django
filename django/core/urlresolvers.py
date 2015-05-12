@@ -8,6 +8,7 @@ a string) and returns a tuple in this format:
 """
 from __future__ import unicode_literals
 
+import functools
 from importlib import import_module
 import re
 from threading import local
@@ -131,8 +132,7 @@ def get_ns_resolver(ns_pattern, resolver):
     # Build a namespaced resolver for the given parent urlconf pattern.
     # This makes it possible to have captured parameters in the parent
     # urlconf pattern.
-    ns_resolver = RegexURLResolver(ns_pattern,
-                                          resolver.url_patterns)
+    ns_resolver = RegexURLResolver(ns_pattern, resolver.url_patterns)
     return RegexURLResolver(r'^/', [ns_resolver])
 
 
@@ -246,6 +246,10 @@ class RegexURLResolver(LocaleRegexProvider):
         self._reverse_dict = {}
         self._namespace_dict = {}
         self._app_dict = {}
+        # set of dotted paths to all functions and classes that are used in
+        # urlpatterns
+        self._callback_strs = set()
+        self._populated = False
 
     def __repr__(self):
         if isinstance(self.urlconf_name, list) and len(self.urlconf_name):
@@ -263,6 +267,18 @@ class RegexURLResolver(LocaleRegexProvider):
         apps = {}
         language_code = get_language()
         for pattern in reversed(self.url_patterns):
+            if hasattr(pattern, '_callback_str'):
+                self._callback_strs.add(pattern._callback_str)
+            elif hasattr(pattern, '_callback'):
+                callback = pattern._callback
+                if isinstance(callback, functools.partial):
+                    callback = callback.func
+
+                if not hasattr(callback, '__name__'):
+                    lookup_str = callback.__module__ + "." + callback.__class__.__name__
+                else:
+                    lookup_str = callback.__module__ + "." + callback.__name__
+                self._callback_strs.add(lookup_str)
             p_pattern = pattern.regex.pattern
             if p_pattern.startswith('^'):
                 p_pattern = p_pattern[1:]
@@ -272,17 +288,16 @@ class RegexURLResolver(LocaleRegexProvider):
                     if pattern.app_name:
                         apps.setdefault(pattern.app_name, []).append(pattern.namespace)
                 else:
-                    parent = normalize(pattern.regex.pattern)
+                    parent_pat = pattern.regex.pattern
                     for name in pattern.reverse_dict:
                         for matches, pat, defaults in pattern.reverse_dict.getlist(name):
-                            new_matches = []
-                            for piece, p_args in parent:
-                                new_matches.extend((piece + suffix, p_args + args) for (suffix, args) in matches)
+                            new_matches = normalize(parent_pat + pat)
                             lookups.appendlist(name, (new_matches, p_pattern + pat, dict(defaults, **pattern.default_kwargs)))
                     for namespace, (prefix, sub_pattern) in pattern.namespace_dict.items():
                         namespaces[namespace] = (p_pattern + prefix, sub_pattern)
                     for app_name, namespace_list in pattern.app_dict.items():
                         apps.setdefault(app_name, []).extend(namespace_list)
+                    self._callback_strs.update(pattern._callback_strs)
             else:
                 bits = normalize(p_pattern)
                 lookups.appendlist(pattern.callback, (bits, p_pattern, pattern.default_args))
@@ -291,6 +306,7 @@ class RegexURLResolver(LocaleRegexProvider):
         self._reverse_dict[language_code] = lookups
         self._namespace_dict[language_code] = namespaces
         self._app_dict[language_code] = apps
+        self._populated = True
 
     @property
     def reverse_dict(self):
@@ -312,6 +328,11 @@ class RegexURLResolver(LocaleRegexProvider):
         if language_code not in self._app_dict:
             self._populate()
         return self._app_dict[language_code]
+
+    def _is_callback(self, name):
+        if not self._populated:
+            self._populate()
+        return name in self._callback_strs
 
     def resolve(self, path):
         path = force_text(path)  # path may be a reverse_lazy object
@@ -347,11 +368,17 @@ class RegexURLResolver(LocaleRegexProvider):
 
     @property
     def url_patterns(self):
+        # urlconf_module might be a valid set of patterns, so we default to it
         patterns = getattr(self.urlconf_module, "urlpatterns", self.urlconf_module)
         try:
             iter(patterns)
         except TypeError:
-            raise ImproperlyConfigured("The included urlconf %s doesn't have any patterns in it" % self.urlconf_name)
+            msg = (
+                "The included urlconf '{name}' does not appear to have any "
+                "patterns in it. If you see valid patterns in the file then "
+                "the issue is probably caused by a circular import."
+            )
+            raise ImproperlyConfigured(msg.format(name=self.urlconf_name))
         return patterns
 
     def _resolve_special(self, view_type):
@@ -384,8 +411,12 @@ class RegexURLResolver(LocaleRegexProvider):
         text_args = [force_text(v) for v in args]
         text_kwargs = dict((k, force_text(v)) for (k, v) in kwargs.items())
 
+        if not self._populated:
+            self._populate()
+
         try:
-            lookup_view = get_callable(lookup_view, True)
+            if self._is_callback(lookup_view):
+                lookup_view = get_callable(lookup_view, True)
         except (ImportError, AttributeError) as e:
             raise NoReverseMatch("Error importing '%s': %s." % (lookup_view, e))
         possibilities = self.reverse_dict.getlist(lookup_view)
@@ -416,7 +447,11 @@ class RegexURLResolver(LocaleRegexProvider):
                 candidate_pat = prefix_norm.replace('%', '%%') + result
                 if re.search('^%s%s' % (prefix_norm, pattern), candidate_pat % candidate_subs, re.UNICODE):
                     candidate_subs = dict((k, urlquote(v)) for (k, v) in candidate_subs.items())
-                    return candidate_pat % candidate_subs
+                    url = candidate_pat % candidate_subs
+                    # Don't allow construction of scheme relative urls.
+                    if url.startswith('//'):
+                        url = '/%%2F%s' % url[2:]
+                    return url
         # lookup_view can be URL label, or dotted path, or callable, Any of
         # these can be passed in at the top, but callables are not friendly in
         # error messages.

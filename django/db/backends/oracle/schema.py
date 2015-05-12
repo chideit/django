@@ -1,5 +1,9 @@
 import copy
+import datetime
+import binascii
 
+from django.utils import six
+from django.utils.text import force_text
 from django.db.backends.schema import BaseDatabaseSchemaEditor
 from django.db.utils import DatabaseError
 
@@ -14,6 +18,18 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
     sql_alter_column_no_default = "MODIFY %(column)s DEFAULT NULL"
     sql_delete_column = "ALTER TABLE %(table)s DROP COLUMN %(column)s"
     sql_delete_table = "DROP TABLE %(table)s CASCADE CONSTRAINTS"
+
+    def quote_value(self, value):
+        if isinstance(value, (datetime.date, datetime.time, datetime.datetime)):
+            return "'%s'" % value
+        elif isinstance(value, six.string_types):
+            return "'%s'" % six.text_type(value).replace("\'", "\'\'")
+        elif isinstance(value, six.buffer_types):
+            return "'%s'" % force_text(binascii.hexlify(value))
+        elif isinstance(value, bool):
+            return "1" if value else "0"
+        else:
+            return str(value)
 
     def delete_model(self, model):
         # Run superclass action
@@ -92,4 +108,4 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         return self.normalize_name(for_name + "_" + suffix)
 
     def prepare_default(self, value):
-        return self.connection.ops.quote_parameter(value)
+        return self.quote_value(value)

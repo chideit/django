@@ -45,7 +45,7 @@ GeoDjango's admin site
    .. attribute:: openlayers_url
 
    Link to the URL of the OpenLayers JavaScript.  Defaults to
-   ``'http://openlayers.org/api/2.11/OpenLayers.js'``.
+   ``'http://openlayers.org/api/2.13/OpenLayers.js'``.
 
 
    .. attribute:: modifiable
@@ -67,6 +67,6 @@ GeoDjango's admin site
 .. class:: OSMGeoAdmin
 
    A subclass of :class:`GeoModelAdmin` that uses a spherical mercator projection
-   with `OpenStreetMap <http://openstreetmap.org/>`_ street data tiles.
+   with `OpenStreetMap <http://www.openstreetmap.org/>`_ street data tiles.
    See the :ref:`OSMGeoAdmin introduction <osmgeoadmin-intro>`
    in the tutorial for a usage example.

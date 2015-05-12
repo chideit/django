@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from django.contrib.gis.geos import GEOSGeometry, LinearRing, Polygon, Point
 from django.contrib.gis.maps.google.gmap import GoogleMapException
 from django.utils.six.moves import xrange
@@ -69,7 +71,7 @@ class GoogleZoom(object):
         npix = self._npix[zoom]
 
         # Calculating the pixel x coordinate by multiplying the longitude value
-        # with with the number of degrees/pixel at the given zoom level.
+        # with the number of degrees/pixel at the given zoom level.
         px_x = round(npix + (lon * self._degpp[zoom]))
 
         # Creating the factor, and ensuring that 1 or -1 is not passed in as the

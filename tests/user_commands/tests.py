@@ -1,8 +1,10 @@
+import os
 import sys
 
+from django.db import connection
 from django.core import management
 from django.core.management import CommandError
-from django.core.management.utils import popen_wrapper
+from django.core.management.utils import find_command, popen_wrapper
 from django.test import SimpleTestCase
 from django.utils import translation
 from django.utils.six import StringIO
@@ -59,6 +61,26 @@ class CommandTests(SimpleTestCase):
         with translation.override('pl'):
             management.call_command('leave_locale_alone_true', stdout=out)
             self.assertEqual(out.getvalue(), "pl\n")
+
+    def test_find_command_without_PATH(self):
+        """
+        find_command should still work when the PATH environment variable
+        doesn't exist (#22256).
+        """
+        current_path = os.environ.pop('PATH', None)
+
+        try:
+            self.assertIsNone(find_command('_missing_'))
+        finally:
+            if current_path is not None:
+                os.environ['PATH'] = current_path
+
+    def test_output_transaction(self):
+        out = StringIO()
+        management.call_command('transaction', stdout=out, no_color=True)
+        output = out.getvalue().strip()
+        self.assertTrue(output.startswith(connection.ops.start_transaction_sql()))
+        self.assertTrue(output.endswith(connection.ops.end_transaction_sql()))
 
 
 class UtilsTests(SimpleTestCase):

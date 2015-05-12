@@ -4,11 +4,12 @@ import os
 from datetime import date
 from unittest import skipUnless
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib.sitemaps import Sitemap, GenericSitemap
 from django.contrib.sites.models import Site
 from django.core.exceptions import ImproperlyConfigured
-from django.test.utils import override_settings
+from django.test import modify_settings, override_settings
 from django.utils.formats import localize
 from django.utils._os import upath
 from django.utils.translation import activate, deactivate
@@ -81,6 +82,21 @@ class HTTPSitemapTests(SitemapTestsBase):
         response = self.client.get('/lastmod/sitemap.xml')
         self.assertEqual(response['Last-Modified'], 'Wed, 13 Mar 2013 10:00:00 GMT')
 
+    def test_sitemap_last_modified_date(self):
+        """
+        The Last-Modified header should be support dates (without time).
+        """
+        response = self.client.get('/lastmod/date-sitemap.xml')
+        self.assertEqual(response['Last-Modified'], 'Wed, 13 Mar 2013 00:00:00 GMT')
+
+    def test_sitemap_last_modified_tz(self):
+        """
+        The Last-Modified header should be converted from timezone aware dates
+        to GMT.
+        """
+        response = self.client.get('/lastmod/tz-sitemap.xml')
+        self.assertEqual(response['Last-Modified'], 'Wed, 13 Mar 2013 15:00:00 GMT')
+
     def test_sitemap_last_modified_missing(self):
         "Tests that Last-Modified header is missing when sitemap has no lastmod"
         response = self.client.get('/generic/sitemap.xml')
@@ -105,10 +121,10 @@ class HTTPSitemapTests(SitemapTestsBase):
         self.assertContains(response, '<lastmod>%s</lastmod>' % date.today())
         deactivate()
 
+    @modify_settings(INSTALLED_APPS={'remove': 'django.contrib.sites'})
     def test_requestsite_sitemap(self):
         # Make sure hitting the flatpages sitemap without the sites framework
-        # installed doesn't raise an exception
-        Site._meta.installed = False
+        # installed doesn't raise an exception.
         response = self.client.get('/simple/sitemap.xml')
         expected_content = """<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -117,7 +133,7 @@ class HTTPSitemapTests(SitemapTestsBase):
 """ % date.today()
         self.assertXMLEqual(response.content.decode('utf-8'), expected_content)
 
-    @skipUnless("django.contrib.sites" in settings.INSTALLED_APPS,
+    @skipUnless(apps.is_installed('django.contrib.sites'),
                 "django.contrib.sites app not installed.")
     def test_sitemap_get_urls_no_site_1(self):
         """
@@ -127,13 +143,13 @@ class HTTPSitemapTests(SitemapTestsBase):
         Site.objects.all().delete()
         self.assertRaises(ImproperlyConfigured, Sitemap().get_urls)
 
+    @modify_settings(INSTALLED_APPS={'remove': 'django.contrib.sites'})
     def test_sitemap_get_urls_no_site_2(self):
         """
         Check we get ImproperlyConfigured when we don't pass a site object to
         Sitemap.get_urls if Site objects exists, but the sites framework is not
         actually installed.
         """
-        Site._meta.installed = False
         self.assertRaises(ImproperlyConfigured, Sitemap().get_urls)
 
     def test_sitemap_item(self):

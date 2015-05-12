@@ -1,14 +1,12 @@
 import os
 
-from django.conf import global_settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.tests.utils import skipIfCustomUser
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.context_processors import PermWrapper, PermLookupDict
 from django.db.models import Q
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils._os import upath
 
 
@@ -78,8 +76,13 @@ class AuthContextProcessorTests(TestCase):
     fixtures = ['context-processors-users.xml']
 
     @override_settings(
-        MIDDLEWARE_CLASSES=global_settings.MIDDLEWARE_CLASSES,
-        TEMPLATE_CONTEXT_PROCESSORS=global_settings.TEMPLATE_CONTEXT_PROCESSORS,
+        MIDDLEWARE_CLASSES=(
+            'django.contrib.sessions.middleware.SessionMiddleware',
+            'django.contrib.auth.middleware.AuthenticationMiddleware',
+        ),
+        TEMPLATE_CONTEXT_PROCESSORS=(
+            'django.contrib.auth.context_processors.auth',
+        ),
     )
     def test_session_not_accessed(self):
         """
@@ -90,8 +93,13 @@ class AuthContextProcessorTests(TestCase):
         self.assertContains(response, "Session not accessed")
 
     @override_settings(
-        MIDDLEWARE_CLASSES=global_settings.MIDDLEWARE_CLASSES,
-        TEMPLATE_CONTEXT_PROCESSORS=global_settings.TEMPLATE_CONTEXT_PROCESSORS,
+        MIDDLEWARE_CLASSES=(
+            'django.contrib.sessions.middleware.SessionMiddleware',
+            'django.contrib.auth.middleware.AuthenticationMiddleware',
+        ),
+        TEMPLATE_CONTEXT_PROCESSORS=(
+            'django.contrib.auth.context_processors.auth',
+        ),
     )
     def test_session_is_accessed(self):
         """

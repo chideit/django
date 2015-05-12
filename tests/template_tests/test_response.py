@@ -10,7 +10,7 @@ from django.conf import settings
 from django.template import Template, Context
 from django.template.response import (TemplateResponse, SimpleTemplateResponse,
                                       ContentNotRenderedError)
-from django.test.utils import override_settings
+from django.test import override_settings
 from django.utils._os import upath
 
 
@@ -167,7 +167,7 @@ class SimpleTemplateResponseTest(TestCase):
         self.assertEqual(unpickled_response['content-type'], response['content-type'])
         self.assertEqual(unpickled_response.status_code, response.status_code)
 
-        # ...and the unpickled reponse doesn't have the
+        # ...and the unpickled response doesn't have the
         # template-related attributes, so it can't be re-rendered
         template_attrs = ('template_name', 'context_data', '_post_render_callbacks')
         for attr in template_attrs:
@@ -259,7 +259,8 @@ class TemplateResponseTest(TestCase):
             'first/test.html', {
                 'value': 123,
                 'fn': datetime.now,
-            })
+            }
+        )
         self.assertRaises(ContentNotRenderedError,
                           pickle.dumps, response)
 
@@ -272,7 +273,7 @@ class TemplateResponseTest(TestCase):
         self.assertEqual(unpickled_response['content-type'], response['content-type'])
         self.assertEqual(unpickled_response.status_code, response.status_code)
 
-        # ...and the unpickled reponse doesn't have the
+        # ...and the unpickled response doesn't have the
         # template-related attributes, so it can't be re-rendered
         template_attrs = ('template_name', 'context_data',
             '_post_render_callbacks', '_request', '_current_app')

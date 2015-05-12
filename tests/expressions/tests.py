@@ -1,9 +1,11 @@
 from __future__ import unicode_literals
 
+from copy import deepcopy
+
 from django.core.exceptions import FieldError
 from django.db.models import F
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, skipIfDBFeature
 from django.utils import six
 
 from .models import Company, Employee
@@ -224,6 +226,25 @@ class ExpressionsTests(TestCase):
         acme.num_employees = F("num_employees") + 16
         self.assertRaises(TypeError, acme.save)
 
+    def test_ticket_11722_iexact_lookup(self):
+        Employee.objects.create(firstname="John", lastname="Doe")
+        Employee.objects.create(firstname="Test", lastname="test")
+
+        queryset = Employee.objects.filter(firstname__iexact=F('lastname'))
+        self.assertQuerysetEqual(queryset, ["<Employee: Test test>"])
+
+    @skipIfDBFeature('has_case_insensitive_like')
+    def test_ticket_16731_startswith_lookup(self):
+        Employee.objects.create(firstname="John", lastname="Doe")
+        e2 = Employee.objects.create(firstname="Jack", lastname="Jackson")
+        e3 = Employee.objects.create(firstname="Jack", lastname="jackson")
+        self.assertQuerysetEqual(
+            Employee.objects.filter(lastname__startswith=F('firstname')),
+            [e2], lambda x: x)
+        self.assertQuerysetEqual(
+            Employee.objects.filter(lastname__istartswith=F('firstname')).order_by('pk'),
+            [e2, e3], lambda x: x)
+
     def test_ticket_18375_join_reuse(self):
         # Test that reverse multijoin F() references and the lookup target
         # the same join. Pre #18375 the F() join was generated first, and the
@@ -246,7 +267,7 @@ class ExpressionsTests(TestCase):
         # Another similar case for F() than above. Now we have the same join
         # in two filter kwargs, one in the lhs lookup, one in F. Here pre
         # #18375 the amount of joins generated was random if dict
-        # randomization was enabled, that is the generated query dependend
+        # randomization was enabled, that is the generated query dependent
         # on which clause was seen first.
         qs = Employee.objects.filter(
             company_ceo_set__num_employees=F('pk'),
@@ -262,3 +283,11 @@ class ExpressionsTests(TestCase):
             company_ceo_set__num_employees=F('company_ceo_set__num_employees')
         )
         self.assertEqual(str(qs.query).count('JOIN'), 2)
+
+    def test_F_object_deepcopy(self):
+        """
+        Make sure F objects can be deepcopied (#23492)
+        """
+        f = F("foo")
+        g = deepcopy(f)
+        self.assertEqual(f.name, g.name)

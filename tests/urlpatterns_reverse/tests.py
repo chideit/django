@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 """
 Unit tests for reverse URL lookups.
 """
 from __future__ import unicode_literals
 
+import sys
 import unittest
 
 from django.contrib.auth.models import User
@@ -12,9 +14,10 @@ from django.core.urlresolvers import (reverse, reverse_lazy, resolve, get_callab
     RegexURLPattern)
 from django.http import HttpRequest, HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.shortcuts import redirect
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils import six
+
+from admin_scripts.tests import AdminScriptTestCase
 
 from . import urlconf_outer, middleware, views
 from .views import empty_view
@@ -119,6 +122,7 @@ test_data = (
     ('inner-extra', '/outer/42/extra/inner/', [], {'extra': 'inner', 'outer': '42'}),
     ('inner-extra', '/outer/42/extra/inner/', ['42', 'inner'], {}),
     ('inner-extra', NoReverseMatch, ['fred', 'inner'], {}),
+    ('inner-no-kwargs', '/outer-no-kwargs/42/inner-no-kwargs/1/', ['42', '1'], {}),
     ('disjunction', NoReverseMatch, ['foo'], {}),
     ('inner-disjunction', NoReverseMatch, ['10', '11'], {}),
     ('extra-places', '/e-places/10/', ['10'], {}),
@@ -147,6 +151,9 @@ test_data = (
     ('defaults', '/defaults_view2/3/', [], {'arg1': 3, 'arg2': 2}),
     ('defaults', NoReverseMatch, [], {'arg1': 3, 'arg2': 3}),
     ('defaults', NoReverseMatch, [], {'arg2': 1}),
+
+    # Security tests
+    ('security', '/%2Fexample.com/security/', ['/example.com'], {}),
 )
 
 
@@ -160,8 +167,10 @@ class NoURLPatternsTests(TestCase):
         resolver = RegexURLResolver(r'^$', self.urls)
 
         self.assertRaisesMessage(ImproperlyConfigured,
-            "The included urlconf urlpatterns_reverse.no_urls "
-            "doesn't have any patterns in it", getattr, resolver, 'url_patterns')
+            "The included urlconf 'urlpatterns_reverse.no_urls' does not "
+            "appear to have any patterns in it. If you see valid patterns in "
+            "the file then the issue is probably caused by a circular import.",
+            getattr, resolver, 'url_patterns')
 
 
 class URLPatternReverse(TestCase):
@@ -302,6 +311,24 @@ class ReverseLazyTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class ReverseLazySettingsTest(AdminScriptTestCase):
+    """
+    Test that reverse_lazy can be used in settings without causing a circular
+    import error.
+    """
+    def setUp(self):
+        self.write_settings('settings.py', extra="""
+from django.core.urlresolvers import reverse_lazy
+LOGIN_URL = reverse_lazy('login')""")
+
+    def tearDown(self):
+        self.remove_settings('settings.py')
+
+    def test_lazy_in_settings(self):
+        out, err = self.run_manage(['validate'])
+        self.assertNoOutput(err)
+
+
 class ReverseShortcutTests(TestCase):
     urls = 'urlpatterns_reverse.urls'
 
@@ -333,6 +360,25 @@ class ReverseShortcutTests(TestCase):
         self.assertEqual(res.url, '/foo/')
         res = redirect('http://example.com/')
         self.assertEqual(res.url, 'http://example.com/')
+        # Assert that we can redirect using UTF-8 strings
+        res = redirect('/æøå/abc/')
+        self.assertEqual(res.url, '/%C3%A6%C3%B8%C3%A5/abc/')
+        # Assert that no imports are attempted when dealing with a relative path
+        # (previously, the below would resolve in a UnicodeEncodeError from __import__ )
+        res = redirect('/æøå.abc/')
+        self.assertEqual(res.url, '/%C3%A6%C3%B8%C3%A5.abc/')
+        res = redirect('os.path')
+        self.assertEqual(res.url, 'os.path')
+
+    def test_no_illegal_imports(self):
+        # modules that are not listed in urlpatterns should not be importable
+        redirect("urlpatterns_reverse.nonimported_module.view")
+        self.assertNotIn("urlpatterns_reverse.nonimported_module", sys.modules)
+
+    def test_reverse_by_path_nested(self):
+        # Views that are added to urlpatterns using include() should be
+        # reversible by dotted path.
+        self.assertEqual(reverse('urlpatterns_reverse.views.nested_view'), '/includes/nested_path/')
 
     def test_redirect_view_object(self):
         from .views import absolute_kwargs_view
@@ -397,7 +443,7 @@ class NamespaceTests(TestCase):
         self.assertEqual('/ns-included1/+%5C$*/', reverse('inc-ns1:inc-special-view'))
 
     def test_namespace_pattern_with_variable_prefix(self):
-        "When using a include with namespaces when there is a regex variable in front of it"
+        "When using an include with namespaces when there is a regex variable in front of it"
         self.assertEqual('/ns-outer/42/normal/', reverse('inc-outer:inc-normal-view', kwargs={'outer': 42}))
         self.assertEqual('/ns-outer/42/normal/', reverse('inc-outer:inc-normal-view', args=[42]))
         self.assertEqual('/ns-outer/42/normal/37/4/', reverse('inc-outer:inc-normal-view', kwargs={'outer': 42, 'arg1': 37, 'arg2': 4}))

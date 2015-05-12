@@ -1,18 +1,19 @@
 import os
 import errno
-import itertools
 from datetime import datetime
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousFileOperation
 from django.core.files import locks, File
 from django.core.files.move import file_move_safe
+from django.utils.crypto import get_random_string
 from django.utils.encoding import force_text, filepath_to_uri
 from django.utils.functional import LazyObject
-from django.utils.module_loading import import_by_path
+from django.utils.module_loading import import_string
 from django.utils.six.moves.urllib.parse import urljoin
 from django.utils.text import get_valid_filename
 from django.utils._os import safe_join, abspathu
+from django.utils.deconstruct import deconstructible
 
 
 __all__ = ('Storage', 'FileSystemStorage', 'DefaultStorage', 'default_storage')
@@ -68,13 +69,12 @@ class Storage(object):
         """
         dir_name, file_name = os.path.split(name)
         file_root, file_ext = os.path.splitext(file_name)
-        # If the filename already exists, add an underscore and a number (before
-        # the file extension, if one exists) to the filename until the generated
-        # filename doesn't exist.
-        count = itertools.count(1)
+        # If the filename already exists, add an underscore and a random 7
+        # character alphanumeric string (before the file extension, if one
+        # exists) to the filename until the generated filename doesn't exist.
         while self.exists(name):
             # file_ext includes the dot.
-            name = os.path.join(dir_name, "%s_%s%s" % (file_root, next(count), file_ext))
+            name = os.path.join(dir_name, "%s_%s%s" % (file_root, get_random_string(7), file_ext))
 
         return name
 
@@ -97,10 +97,10 @@ class Storage(object):
 
     def exists(self, name):
         """
-        Returns True if a file referened by the given name already exists in the
+        Returns True if a file referenced by the given name already exists in the
         storage system, or False if the name is available for a new file.
         """
-        raise NotImplementedError('subclasses of Storage must provide a exists() method')
+        raise NotImplementedError('subclasses of Storage must provide an exists() method')
 
     def listdir(self, path):
         """
@@ -144,12 +144,14 @@ class Storage(object):
         raise NotImplementedError('subclasses of Storage must provide a modified_time() method')
 
 
+@deconstructible
 class FileSystemStorage(Storage):
     """
     Standard filesystem storage
     """
 
-    def __init__(self, location=None, base_url=None, file_permissions_mode=None):
+    def __init__(self, location=None, base_url=None, file_permissions_mode=None,
+            directory_permissions_mode=None):
         if location is None:
             location = settings.MEDIA_ROOT
         self.base_location = location
@@ -160,6 +162,10 @@ class FileSystemStorage(Storage):
         self.file_permissions_mode = (
             file_permissions_mode if file_permissions_mode is not None
             else settings.FILE_UPLOAD_PERMISSIONS
+        )
+        self.directory_permissions_mode = (
+            directory_permissions_mode if directory_permissions_mode is not None
+            else settings.FILE_UPLOAD_DIRECTORY_PERMISSIONS
         )
 
     def _open(self, name, mode='rb'):
@@ -175,12 +181,12 @@ class FileSystemStorage(Storage):
         directory = os.path.dirname(full_path)
         if not os.path.exists(directory):
             try:
-                if settings.FILE_UPLOAD_DIRECTORY_PERMISSIONS is not None:
+                if self.directory_permissions_mode is not None:
                     # os.makedirs applies the global umask, so we reset it,
-                    # for consistency with FILE_UPLOAD_PERMISSIONS behavior.
+                    # for consistency with file_permissions_mode behavior.
                     old_umask = os.umask(0)
                     try:
-                        os.makedirs(directory, settings.FILE_UPLOAD_DIRECTORY_PERMISSIONS)
+                        os.makedirs(directory, self.directory_permissions_mode)
                     finally:
                         os.umask(old_umask)
                 else:
@@ -202,7 +208,6 @@ class FileSystemStorage(Storage):
                 # This file has a file path that we can move.
                 if hasattr(content, 'temporary_file_path'):
                     file_move_safe(content.temporary_file_path(), full_path)
-                    content.close()
 
                 # This is a normal uploadedfile that we can stream.
                 else:
@@ -221,7 +226,6 @@ class FileSystemStorage(Storage):
                                 _file = os.fdopen(fd, mode)
                             _file.write(chunk)
                     finally:
-                        content.close()
                         locks.unlock(fd)
                         if _file is not None:
                             _file.close()
@@ -296,7 +300,7 @@ class FileSystemStorage(Storage):
 
 
 def get_storage_class(import_path=None):
-    return import_by_path(import_path or settings.DEFAULT_FILE_STORAGE)
+    return import_string(import_path or settings.DEFAULT_FILE_STORAGE)
 
 
 class DefaultStorage(LazyObject):

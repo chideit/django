@@ -12,8 +12,7 @@ from django.contrib.auth.forms import (UserCreationForm, AuthenticationForm,
 from django.contrib.auth.tests.utils import skipIfCustomUser
 from django.core import mail
 from django.forms.fields import Field, CharField
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils.encoding import force_text
 from django.utils._os import upath
 from django.utils import translation
@@ -133,7 +132,7 @@ class AuthenticationFormTest(TestCase):
                              [force_text(form.error_messages['inactive'])])
 
     def test_custom_login_allowed_policy(self):
-        # The user is inactive, but our custom form policy allows him to log in.
+        # The user is inactive, but our custom form policy allows them to log in.
         data = {
             'username': 'inactive',
             'password': 'password',
@@ -151,8 +150,8 @@ class AuthenticationFormTest(TestCase):
         class PickyAuthenticationForm(AuthenticationForm):
             def confirm_login_allowed(self, user):
                 if user.username == "inactive":
-                    raise forms.ValidationError(_("This user is disallowed."))
-                raise forms.ValidationError(_("Sorry, nobody's allowed in."))
+                    raise forms.ValidationError("This user is disallowed.")
+                raise forms.ValidationError("Sorry, nobody's allowed in.")
 
         form = PickyAuthenticationForm(None, data)
         self.assertFalse(form.is_valid())
@@ -387,9 +386,9 @@ class PasswordResetFormTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(form['email'].errors, [_('Enter a valid email address.')])
 
-    def test_nonexistant_email(self):
+    def test_nonexistent_email(self):
         """
-        Test nonexistant email address. This should not fail because it would
+        Test nonexistent email address. This should not fail because it would
         expose information about registered users.
         """
         data = {'email': 'foo@bar.com'}

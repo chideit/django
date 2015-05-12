@@ -97,7 +97,7 @@ class Collector(object):
 
     def add_field_update(self, field, value, objs):
         """
-        Schedules a field update. 'objs' must be a homogenous iterable
+        Schedules a field update. 'objs' must be a homogeneous iterable
         collection of model instances (e.g. a QuerySet).
         """
         if not objs:
@@ -135,20 +135,20 @@ class Collector(object):
         # Foreign keys pointing to this model, both from m2m and other
         # models.
         for related in opts.get_all_related_objects(
-            include_hidden=True, include_proxy_eq=True):
+                include_hidden=True, include_proxy_eq=True):
             if related.field.rel.on_delete is not DO_NOTHING:
                 return False
-        # GFK deletes
-        for relation in opts.many_to_many:
-            if not relation.rel.through:
+        for field in model._meta.virtual_fields:
+            if hasattr(field, 'bulk_related_objects'):
+                # It's something like generic foreign key.
                 return False
         return True
 
     def collect(self, objs, source=None, nullable=False, collect_related=True,
-        source_attr=None, reverse_dependency=False):
+            source_attr=None, reverse_dependency=False):
         """
         Adds 'objs' to the collection of objects to be deleted as well as all
-        parent instances.  'objs' must be a homogenous iterable collection of
+        parent instances.  'objs' must be a homogeneous iterable collection of
         model instances (e.g. a QuerySet).  If 'collect_related' is True,
         related objects will be handled by their respective on_delete handler.
 

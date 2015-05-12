@@ -51,13 +51,20 @@ class BaseModelValidationTests(ValidationTestCase):
         mtv = ModelToValidate(number=10, name='Some Name', url='not a url')
         self.assertFieldFailsValidationWithMessage(mtv.full_clean, 'url', ['Enter a valid URL.'])
 
-    def test_text_greater_that_charfields_max_length_raises_erros(self):
+    def test_text_greater_that_charfields_max_length_raises_errors(self):
         mtv = ModelToValidate(number=10, name='Some Name' * 100)
         self.assertFailsValidation(mtv.full_clean, ['name'])
 
     def test_malformed_slug_raises_error(self):
         mtv = ModelToValidate(number=10, name='Some Name', slug='##invalid##')
         self.assertFailsValidation(mtv.full_clean, ['slug'])
+
+    def test_full_clean_does_not_mutate_exclude(self):
+        mtv = ModelToValidate(f_with_custom_validator=42)
+        exclude = ['number']
+        self.assertFailsValidation(mtv.full_clean, ['name'], exclude=exclude)
+        self.assertEqual(len(exclude), 1)
+        self.assertEqual(exclude[0], 'number')
 
 
 class ArticleForm(forms.ModelForm):

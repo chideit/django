@@ -107,13 +107,72 @@ Finally, do the same for the SpatiaLite tools::
 
 __ http://www.gaia-gis.it/gaia-sins/libspatialite-sources/
 
+.. _pysqlite2:
+
+pysqlite2
+^^^^^^^^^
+
+If you've decided to use a :ref:`newer version of pysqlite2
+<using-newer-versions-of-pysqlite>` instead of the ``sqlite3`` Python stdlib
+module, then you need to make sure it can load external extensions (i.e. the
+required ``enable_load_extension`` method is available so ``SpatiaLite`` can be
+loaded).
+
+This might involve building it yourself. For this, download pysqlite2 2.6, and
+untar::
+
+    $ wget https://pypi.python.org/packages/source/p/pysqlite/pysqlite-2.6.3.tar.gz
+    $ tar xzf pysqlite-2.6.3.tar.gz
+    $ cd pysqlite-2.6.3
+
+Next, use a text editor to edit the ``setup.cfg`` file to look like the
+following:
+
+.. code-block:: ini
+
+    [build_ext]
+    #define=
+    include_dirs=/usr/local/include
+    library_dirs=/usr/local/lib
+    libraries=sqlite3
+    #define=SQLITE_OMIT_LOAD_EXTENSION
+
+or if you are on Mac OS X:
+
+.. code-block:: ini
+
+    [build_ext]
+    #define=
+    include_dirs=/Library/Frameworks/SQLite3.framework/unix/include
+    library_dirs=/Library/Frameworks/SQLite3.framework/unix/lib
+    libraries=sqlite3
+    #define=SQLITE_OMIT_LOAD_EXTENSION
+
+.. note::
+
+    The important thing here is to make sure you comment out the
+    ``define=SQLITE_OMIT_LOAD_EXTENSION`` flag and that the ``include_dirs``
+    and ``library_dirs`` settings are uncommented and set to the appropriate
+    path if the SQLite header files and libraries are not in ``/usr/include``
+    and ``/usr/lib``, respectively.
+
+After modifying ``setup.cfg`` appropriately, then run the ``setup.py`` script
+to build and install::
+
+    $ sudo python setup.py install
+
 .. _spatialite_macosx:
 
 Mac OS X-specific instructions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Mac OS X users should follow the instructions in the :ref:`kyngchaos` section,
-as it is much easier than building from source.
+To install the SpatiaLite library and tools, Mac OS X users can choose between
+:ref:`kyngchaos` and `Homebrew`_.
+
+KyngChaos
+^^^^^^^^^
+
+First, follow the instructions in the :ref:`kyngchaos` section.
 
 When :ref:`create_spatialite_db`, the ``spatialite`` program is required.
 However, instead of attempting to compile the SpatiaLite tools from source,
@@ -133,6 +192,23 @@ add the following to your ``settings.py``:
     SPATIALITE_LIBRARY_PATH='/Library/Frameworks/SQLite3.framework/SQLite3'
 
 __ http://www.gaia-gis.it/spatialite-2.3.1/binaries.html
+
+Homebrew
+^^^^^^^^
+
+`Homebrew`_ handles all the SpatiaLite related packages on your behalf,
+including SQLite3, SpatiaLite, PROJ, and GEOS. Install them like this::
+
+    $ brew update
+    $ brew install spatialite-tools
+    $ brew install gdal
+
+Finally, for GeoDjango to be able to find the SpatiaLite library, add the
+following to your ``settings.py``::
+
+    SPATIALITE_LIBRARY_PATH='/usr/local/lib/mod_spatialite.dylib'
+
+.. _Homebrew: http://brew.sh/
 
 .. _create_spatialite_db:
 
@@ -172,3 +248,16 @@ Then, use the ``spatialite`` command to initialize a spatial database::
     inside your ``settings.py``.
 
 __ http://www.gaia-gis.it/spatialite-2.3.1/resources.html
+
+.. note::
+
+    When running ``manage.py migrate`` with a SQLite (or SpatiaLite) database,
+    the database file will be automatically created if it doesn't exist. In
+    this case, if your models contain any geometry columns, you'll see this
+    error::
+
+        CreateSpatialIndex() error: "no such table: geometry_columns"
+
+    It's because the table creation queries are executed without spatial
+    metadata tables. To avoid this, make the database file before executing
+    ``manage.py migrate`` as described above.

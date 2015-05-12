@@ -17,6 +17,7 @@ from django.template.base import (Node, NodeList, Template, Context, Library,
     render_value_in_context)
 from django.template.smartif import IfParser, Literal
 from django.template.defaultfilters import date
+from django.utils.deprecation import RemovedInDjango18Warning
 from django.utils.encoding import force_text, smart_text
 from django.utils.safestring import mark_safe
 from django.utils.html import format_html
@@ -88,7 +89,7 @@ class CycleNode(Node):
 class DebugNode(Node):
     def render(self, context):
         from pprint import pformat
-        output = [pformat(val) for val in context]
+        output = [force_text(pformat(val)) for val in context]
         output.append('\n\n')
         output.append(pformat(sys.modules))
         return ''.join(output)
@@ -430,13 +431,9 @@ class URLNode(Node):
         from django.core.urlresolvers import reverse, NoReverseMatch
         args = [arg.resolve(context) for arg in self.args]
         kwargs = dict((smart_text(k, 'ascii'), v.resolve(context))
-                       for k, v in self.kwargs.items())
+                      for k, v in self.kwargs.items())
 
         view_name = self.view_name.resolve(context)
-
-        if not view_name:
-            raise NoReverseMatch("'url' requires a non-empty first argument. "
-                "The syntax changed in Django 1.5, see the docs.")
 
         # Try to look up the URL twice: once given the view name, and again
         # relative to what we guess is the "main" app. If they both fail,
@@ -498,11 +495,11 @@ class WidthRatioNode(Node):
             value = float(value)
             max_value = float(max_value)
             ratio = (value / max_value) * max_width
+            result = str(int(round(ratio)))
         except ZeroDivisionError:
             return '0'
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return ''
-        result = str(int(round(ratio)))
 
         if self.asvar:
             context[self.asvar] = result
@@ -525,7 +522,7 @@ class WithNode(Node):
 
     def render(self, context):
         values = dict((key, val.resolve(context)) for key, val in
-                       six.iteritems(self.extra_context))
+                      six.iteritems(self.extra_context))
         with context.push(**values):
             return self.nodelist.render(context)
 
@@ -571,7 +568,7 @@ def cycle(parser, token, escape=False):
         {% endfor %}
 
     Outside of a loop, give the values a unique name the first time you call
-    it, then use that name each sucessive time through::
+    it, then use that name each successive time through::
 
             <tr class="{% cycle 'row1' 'row2' 'row3' as rowcolors %}">...</tr>
             <tr class="{% cycle rowcolors %}">...</tr>
@@ -595,7 +592,7 @@ def cycle(parser, token, escape=False):
             "'The `cycle` template tag is changing to escape its arguments; "
             "the non-autoescaping version is deprecated. Load it "
             "from the `future` tag library to start using the new behavior.",
-            DeprecationWarning, stacklevel=2)
+            RemovedInDjango18Warning, stacklevel=2)
 
     # Note: This returns the exact same node on each {% cycle name %} call;
     # that is, the node object returned from {% cycle a b c as name %} and the
@@ -622,7 +619,7 @@ def cycle(parser, token, escape=False):
         name = args[1]
         if not hasattr(parser, '_namedCycleNodes'):
             raise TemplateSyntaxError("No named cycles in template. '%s' is not defined" % name)
-        if not name in parser._namedCycleNodes:
+        if name not in parser._namedCycleNodes:
             raise TemplateSyntaxError("Named cycle '%s' does not exist" % name)
         return parser._namedCycleNodes[name]
 
@@ -743,7 +740,7 @@ def firstof(parser, token, escape=False):
             "'The `firstof` template tag is changing to escape its arguments; "
             "the non-autoescaping version is deprecated. Load it "
             "from the `future` tag library to start using the new behavior.",
-            DeprecationWarning, stacklevel=2)
+            RemovedInDjango18Warning, stacklevel=2)
 
     bits = token.split_contents()[1:]
     if len(bits) < 1:
@@ -948,7 +945,7 @@ def do_if(parser, token):
         {% endif %}
 
         {% if athlete_list and coach_list %}
-            Both atheletes and coaches are available.
+            Both athletes and coaches are available.
         {% endif %}
 
         {% if not athlete_list or coach_list %}
@@ -1345,12 +1342,7 @@ def url(parser, token):
     if len(bits) < 2:
         raise TemplateSyntaxError("'%s' takes at least one argument"
                                   " (path to a view)" % bits[0])
-    try:
-        viewname = parser.compile_filter(bits[1])
-    except TemplateSyntaxError as exc:
-        exc.args = (exc.args[0] + ". "
-                "The syntax of 'url' changed in Django 1.5, see the docs."),
-        raise
+    viewname = parser.compile_filter(bits[1])
     args = []
     kwargs = {}
     asvar = None

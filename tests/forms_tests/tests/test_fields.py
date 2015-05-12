@@ -38,7 +38,7 @@ from django.forms import (
     DecimalField, EmailField, Field, FileField, FilePathField, FloatField,
     Form, forms, HiddenInput, IntegerField, MultipleChoiceField,
     NullBooleanField, NumberInput, PasswordInput, RadioSelect, RegexField,
-    SplitDateTimeField, TextInput, TimeField, TypedChoiceField,
+    SplitDateTimeField, TextInput, Textarea, TimeField, TypedChoiceField,
     TypedMultipleChoiceField, URLField, ValidationError, Widget,
 )
 from django.test import SimpleTestCase
@@ -148,14 +148,13 @@ class FieldsTests(SimpleTestCase):
         # Return an empty dictionary if max_length is None
         f = CharField()
         self.assertEqual(f.widget_attrs(TextInput()), {})
-
-        # Or if the widget is not TextInput or PasswordInput
-        f = CharField(max_length=10)
-        self.assertEqual(f.widget_attrs(HiddenInput()), {})
+        self.assertEqual(f.widget_attrs(Textarea()), {})
 
         # Otherwise, return a maxlength attribute equal to max_length
+        f = CharField(max_length=10)
         self.assertEqual(f.widget_attrs(TextInput()), {'maxlength': '10'})
         self.assertEqual(f.widget_attrs(PasswordInput()), {'maxlength': '10'})
+        self.assertEqual(f.widget_attrs(Textarea()), {'maxlength': '10'})
 
     # IntegerField ################################################################
 
@@ -240,6 +239,18 @@ class FieldsTests(SimpleTestCase):
         f1 = IntegerField(localize=True)
         self.assertWidgetRendersTo(f1, '<input id="id_f" name="f" type="text" />')
 
+    def test_integerfield_subclass(self):
+        """
+        Test that class-defined widget is not overwritten by __init__ (#22245).
+        """
+        class MyIntegerField(IntegerField):
+            widget = Textarea
+
+        f = MyIntegerField()
+        self.assertEqual(f.widget.__class__, Textarea)
+        f = MyIntegerField(localize=True)
+        self.assertEqual(f.widget.__class__, Textarea)
+
     # FloatField ##################################################################
 
     def test_floatfield_1(self):
@@ -281,6 +292,10 @@ class FieldsTests(SimpleTestCase):
         self.assertEqual(0.5, f.clean('0.5'))
         self.assertEqual(f.max_value, 1.5)
         self.assertEqual(f.min_value, 0.5)
+
+    def test_floatfield_widget_attrs(self):
+        f = FloatField(widget=NumberInput(attrs={'step': 0.01, 'max': 1.0, 'min': 0.0}))
+        self.assertWidgetRendersTo(f, '<input step="0.01" name="f" min="0.0" max="1.0" type="number" id="id_f" />')
 
     def test_floatfield_localized(self):
         """
@@ -392,6 +407,8 @@ class FieldsTests(SimpleTestCase):
         self.assertEqual(f.widget_attrs(NumberInput()), {'step': '1e-19'})
         f = DecimalField(max_digits=20)
         self.assertEqual(f.widget_attrs(NumberInput()), {'step': 'any'})
+        f = DecimalField(max_digits=6, widget=NumberInput(attrs={'step': '0.01'}))
+        self.assertWidgetRendersTo(f, '<input step="0.01" name="f" type="number" id="id_f" />')
 
     def test_decimalfield_localized(self):
         """
@@ -955,6 +972,7 @@ class FieldsTests(SimpleTestCase):
         # has_changed should not trigger required validation
         f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int, required=True)
         self.assertFalse(f._has_changed(None, ''))
+        self.assertFalse(f._has_changed(1, '1'))
 
     def test_typedchoicefield_special_coerce(self):
         """
@@ -1143,7 +1161,7 @@ class FieldsTests(SimpleTestCase):
             "'Select a valid choice. 3 is not one of the available choices.'",
             f.clean, ['3'])
 
-   # ComboField ##################################################################
+    # ComboField ##################################################################
 
     def test_combofield_1(self):
         f = ComboField(fields=[CharField(max_length=20), EmailField()])

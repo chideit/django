@@ -15,7 +15,7 @@ from io import BytesIO
 
 from django.core import validators
 from django.core.exceptions import ValidationError
-from django.forms.utils import ErrorList, from_current_timezone, to_current_timezone
+from django.forms.utils import from_current_timezone, to_current_timezone
 from django.forms.widgets import (
     TextInput, NumberInput, EmailInput, URLInput, HiddenInput,
     MultipleHiddenInput, ClearableFileInput, CheckboxInput, Select,
@@ -25,6 +25,7 @@ from django.forms.widgets import (
 from django.utils import formats
 from django.utils.encoding import smart_text, force_str, force_text
 from django.utils.ipv6 import clean_ipv6_address
+from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils import six
 from django.utils.six.moves.urllib.parse import urlsplit, urlunsplit
 from django.utils.translation import ugettext_lazy as _, ungettext_lazy
@@ -35,7 +36,7 @@ from django.core.validators import EMPTY_VALUES  # NOQA
 
 __all__ = (
     'Field', 'CharField', 'IntegerField',
-    'DateField', 'TimeField', 'DateTimeField', 'TimeField',
+    'DateField', 'TimeField', 'DateTimeField',
     'RegexField', 'EmailField', 'FileField', 'ImageField', 'URLField',
     'BooleanField', 'NullBooleanField', 'ChoiceField', 'MultipleChoiceField',
     'ComboField', 'MultiValueField', 'FloatField', 'DecimalField',
@@ -78,7 +79,7 @@ class Field(object):
         #                   messages that the field will raise.
         # show_hidden_initial -- Boolean that specifies if it is needed to render a
         #                        hidden widget with initial value after widget.
-        # validators -- List of addtional validators to use
+        # validators -- List of additional validators to use
         # localize -- Boolean that specifies if the field should be localized.
         self.required, self.label, self.initial = required, label, initial
         self.show_hidden_initial = show_hidden_initial
@@ -175,11 +176,13 @@ class Field(object):
         Return True if data differs from initial.
         """
         # For purposes of seeing whether something has changed, None is
-        # the same as an empty string, if the data or inital value we get
+        # the same as an empty string, if the data or initial value we get
         # is None, replace it w/ ''.
         initial_value = initial if initial is not None else ''
         try:
             data = self.to_python(data)
+            if hasattr(self, '_coerce'):
+                data = self._coerce(data)
         except ValidationError:
             return True
         data_value = data if data is not None else ''
@@ -210,20 +213,23 @@ class CharField(Field):
 
     def widget_attrs(self, widget):
         attrs = super(CharField, self).widget_attrs(widget)
-        if self.max_length is not None and isinstance(widget, TextInput):
+        if self.max_length is not None:
             # The HTML attribute is maxlength, not max_length.
             attrs.update({'maxlength': str(self.max_length)})
         return attrs
 
 
 class IntegerField(Field):
+    widget = NumberInput
     default_error_messages = {
         'invalid': _('Enter a whole number.'),
     }
 
     def __init__(self, max_value=None, min_value=None, *args, **kwargs):
         self.max_value, self.min_value = max_value, min_value
-        kwargs.setdefault('widget', NumberInput if not kwargs.get('localize') else self.widget)
+        if kwargs.get('localize') and self.widget == NumberInput:
+            # Localized number input is not well supported on most browsers
+            kwargs.setdefault('widget', super(IntegerField, self).widget)
         super(IntegerField, self).__init__(*args, **kwargs)
 
         if max_value is not None:
@@ -289,7 +295,7 @@ class FloatField(IntegerField):
 
     def widget_attrs(self, widget):
         attrs = super(FloatField, self).widget_attrs(widget)
-        if isinstance(widget, NumberInput):
+        if isinstance(widget, NumberInput) and 'step' not in widget.attrs:
             attrs.setdefault('step', 'any')
         return attrs
 
@@ -377,7 +383,7 @@ class DecimalField(IntegerField):
 
     def widget_attrs(self, widget):
         attrs = super(DecimalField, self).widget_attrs(widget)
-        if isinstance(widget, NumberInput):
+        if isinstance(widget, NumberInput) and 'step' not in widget.attrs:
             if self.decimal_places is not None:
                 # Use exponential notation for small values since they might
                 # be parsed as 0 otherwise. ref #20765
@@ -486,6 +492,10 @@ class DateTimeField(BaseTemporalField):
         if isinstance(value, list):
             # Input comes from a SplitDateTimeWidget, for example. So, it's two
             # components: date and time.
+            warnings.warn(
+                'Using SplitDateTimeWidget with DateTimeField is deprecated. '
+                'Use SplitDateTimeField instead.',
+                RemovedInDjango19Warning, stacklevel=2)
             if len(value) != 2:
                 raise ValidationError(self.error_messages['invalid'], code='invalid')
             if value[0] in self.empty_values and value[1] in self.empty_values:
@@ -506,7 +516,7 @@ class RegexField(CharField):
         'Enter a valid value' is too generic for you.
         """
         # error_message is just kept for backwards compatibility:
-        if error_message:
+        if error_message is not None:
             error_messages = kwargs.get('error_messages') or {}
             error_messages['invalid'] = error_message
             kwargs['error_messages'] = error_messages
@@ -998,7 +1008,7 @@ class MultiValueField(Field):
         DateField.clean(value[0]) and TimeField.clean(value[1]).
         """
         clean_data = []
-        errors = ErrorList()
+        errors = []
         if not value or isinstance(value, (list, tuple)):
             if not value or not [v for v in value if v not in self.empty_values]:
                 if self.required:
@@ -1058,7 +1068,11 @@ class MultiValueField(Field):
             if not isinstance(initial, list):
                 initial = self.widget.decompress(initial)
         for field, initial, data in zip(self.fields, initial, data):
-            if field._has_changed(field.to_python(initial), data):
+            try:
+                initial = field.to_python(initial)
+            except ValidationError:
+                return True
+            if field._has_changed(initial, data):
                 return True
         return False
 
@@ -1102,8 +1116,8 @@ class FilePathField(ChoiceField):
                         continue
                     full_file = os.path.join(self.path, f)
                     if (((self.allow_files and os.path.isfile(full_file)) or
-                        (self.allow_folders and os.path.isdir(full_file))) and
-                        (self.match is None or self.match_re.search(f))):
+                            (self.allow_folders and os.path.isdir(full_file))) and
+                            (self.match is None or self.match_re.search(f))):
                         self.choices.append((full_file, f))
             except OSError:
                 pass
@@ -1152,7 +1166,7 @@ class IPAddressField(CharField):
 
     def __init__(self, *args, **kwargs):
         warnings.warn("IPAddressField has been deprecated. Use GenericIPAddressField instead.",
-                      PendingDeprecationWarning)
+                      RemovedInDjango19Warning)
         super(IPAddressField, self).__init__(*args, **kwargs)
 
     def to_python(self, value):

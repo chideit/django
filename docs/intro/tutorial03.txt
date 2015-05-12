@@ -62,7 +62,10 @@ Write your first view
 =====================
 
 Let's write the first view. Open the file ``polls/views.py``
-and put the following Python code in it::
+and put the following Python code in it:
+
+.. snippet::
+    :filename: polls/views.py
 
     from django.http import HttpResponse
 
@@ -94,7 +97,7 @@ In the ``polls/urls.py`` file include the following code:
     from polls import views
 
     urlpatterns = patterns('',
-        url(r'^$', views.index, name='index')
+        url(r'^$', views.index, name='index'),
     )
 
 The next step is to point the root URLconf at the ``polls.urls`` module. In
@@ -105,14 +108,19 @@ with:
     :filename: mysite/urls.py
 
     from django.conf.urls import patterns, include, url
-
     from django.contrib import admin
-    admin.autodiscover()
 
     urlpatterns = patterns('',
         url(r'^polls/', include('polls.urls')),
         url(r'^admin/', include(admin.site.urls)),
     )
+
+.. admonition:: Doesn't match what you see?
+
+    If you're seeing ``admin.autodiscover()`` before the definition of
+    ``urlpatterns``, you're probably using a version of Django that doesn't
+    match this tutorial version.  You'll want to either switch to the older
+    tutorial or the newer Django version.
 
 You have now wired an ``index`` view into the URLconf. Go to
 http://localhost:8000/polls/ in your browser, and you should see the text
@@ -279,7 +287,7 @@ you want, using whatever Python libraries you want.
 All Django wants is that :class:`~django.http.HttpResponse`. Or an exception.
 
 Because it's convenient, let's use Django's own database API, which we covered
-in :doc:`Tutorial 1 </intro/tutorial01>`. Here's one stab at the ``index()``
+in :doc:`Tutorial 1 </intro/tutorial01>`. Here's one stab at a new ``index()``
 view, which displays the latest 5 poll questions in the system, separated by
 commas, according to publication date:
 
@@ -295,6 +303,8 @@ commas, according to publication date:
         latest_question_list = Question.objects.order_by('-pub_date')[:5]
         output = ', '.join([p.question_text for p in latest_question_list])
         return HttpResponse(output)
+
+    # Leave the rest of the views (detail, results, vote) unchanged
 
 There's a problem here, though: the page's design is hard-coded in the view. If
 you want to change the way the page looks, you'll have to edit this Python code.
@@ -399,7 +409,7 @@ rewritten:
 
 
     def index(request):
-        latest_question_list = Question.objects.all().order_by('-pub_date')[:5]
+        latest_question_list = Question.objects.order_by('-pub_date')[:5]
         context = {'latest_question_list': latest_question_list}
         return render(request, 'polls/index.html', context)
 
@@ -431,7 +441,7 @@ for a given poll. Here's the view:
         try:
             question = Question.objects.get(pk=question_id)
         except Question.DoesNotExist:
-            raise Http404
+            raise Http404("Question does not exist")
         return render(request, 'polls/detail.html', {'question': question})
 
 The new concept here: The view raises the :exc:`~django.http.Http404` exception
@@ -458,7 +468,7 @@ provides a shortcut. Here's the ``detail()`` view, rewritten:
 .. snippet::
     :filename: polls/views.py
 
-    from django.shortcuts import render, get_object_or_404
+    from django.shortcuts import get_object_or_404, render
 
     from polls.models import Question
     # ...
@@ -540,17 +550,6 @@ defined in your url configurations by using the ``{% url %}`` template tag:
 
     <li><a href="{% url 'detail' question.id %}">{{ question.question_text }}</a></li>
 
-.. note::
-
-    If ``{% url 'detail' question.id %}`` (with quotes) doesn't work, but
-    ``{% url detail question.id %}`` (without quotes) does, that means you're
-    using a version of Django < 1.5. In this case, add the following
-    declaration at the top of your template:
-
-    .. code-block:: html+django
-
-        {% load url from future %}
-
 The way this works is by looking up the URL definition as specified in the
 ``polls.urls`` module. You can see exactly where the URL name of 'detail' is
 defined below::
@@ -580,16 +579,13 @@ make it so that Django knows which app view to create for a url when using the
 ``{% url %}`` template tag?
 
 The answer is to add namespaces to your root URLconf. In the ``mysite/urls.py``
-file (the project's ``urls.py``, not the application's), go ahead and change
-it to include namespacing:
+file, go ahead and change it to include namespacing:
 
 .. snippet::
     :filename: mysite/urls.py
 
     from django.conf.urls import patterns, include, url
-
     from django.contrib import admin
-    admin.autodiscover()
 
     urlpatterns = patterns('',
         url(r'^polls/', include('polls.urls', namespace="polls")),

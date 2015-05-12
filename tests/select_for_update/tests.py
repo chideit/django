@@ -8,7 +8,7 @@ from django.db import transaction, connection, router
 from django.db.utils import ConnectionHandler, DEFAULT_DB_ALIAS, DatabaseError
 from django.test import (TransactionTestCase, skipIfDBFeature,
     skipUnlessDBFeature)
-from django.test.utils import override_settings
+from django.test import override_settings
 
 from multiple_database.routers import TestRouter
 
@@ -133,6 +133,34 @@ class SelectForUpdateTests(TransactionTestCase):
             list,
             Person.objects.all().select_for_update(nowait=True)
         )
+
+    @skipUnlessDBFeature('has_select_for_update')
+    def test_for_update_requires_transaction(self):
+        """
+        Test that a TransactionManagementError is raised
+        when a select_for_update query is executed outside of a transaction.
+        """
+        transaction.set_autocommit(True)
+        try:
+            with self.assertRaises(transaction.TransactionManagementError):
+                list(Person.objects.all().select_for_update())
+        finally:
+            transaction.set_autocommit(True)
+
+    @skipUnlessDBFeature('has_select_for_update')
+    def test_for_update_requires_transaction_only_in_execution(self):
+        """
+        Test that no TransactionManagementError is raised
+        when select_for_update is invoked outside of a transaction -
+        only when the query is executed.
+        """
+        transaction.set_autocommit(True)
+        try:
+            people = Person.objects.all().select_for_update()
+            with self.assertRaises(transaction.TransactionManagementError):
+                list(people)
+        finally:
+            transaction.set_autocommit(True)
 
     def run_select_for_update(self, status, nowait=False):
         """
@@ -264,3 +292,9 @@ class SelectForUpdateTests(TransactionTestCase):
             self.assertEqual(router.db_for_write(Person), query.db)
         finally:
             router.routers = old_routers
+
+    @skipUnlessDBFeature('has_select_for_update')
+    def test_select_for_update_with_get(self):
+        with transaction.atomic():
+            person = Person.objects.select_for_update().get(name='Reinhardt')
+        self.assertEqual(person.name, 'Reinhardt')
